@@ -1,0 +1,27 @@
+# Small 10K vector benchmark for testing hybrid mode (concurrent inserts + searches)
+dataset_size: 10000
+query_count: 1000
+dataset_path: null  # Use synthetic data
+
+dataset_generation:
+  enabled: true
+  dimension: 128
+  clusters: 5
+  cluster_std: 0.2
+  k_neighbors: 100
+  seed: 42
+
+concurrent_inserters: 2
+concurrent_searchers: 4
+search_batch_size: 10
+insert_batch_size: 100
+max_runtime_seconds: 60
+warmup_seconds: 5
+benchmark_mode: "hybrid"  # "search_only" or "hybrid"
+
+# Hybrid mode settings (used when benchmark_mode is "hybrid")
+initial_build_percentage: 10  # Percentage of dataset to build initially
+initial_build_size_cap: 1000  # Minimum initial build size
+
+output_path: "results/"
+recall_targets: [0.9, 0.95, 0.99] 

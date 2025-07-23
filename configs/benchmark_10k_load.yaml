@@ -1,0 +1,23 @@
+# 10K vector benchmark using saved dataset
+dataset_size: 10000
+query_count: 1000
+dataset_path: "datasets/synthetic_10k.h5"  # Load existing dataset
+
+# Dataset generation is ignored when dataset_path is provided
+dataset_generation:
+  enabled: false
+
+concurrent_inserters: 2
+concurrent_searchers: 4
+search_batch_size: 10
+insert_batch_size: 100
+max_runtime_seconds: 60
+warmup_seconds: 5
+benchmark_mode: "search_only"  # "search_only" or "hybrid"
+
+# Hybrid mode settings (used when benchmark_mode is "hybrid")
+initial_build_percentage: 10  # Percentage of dataset to build initially
+initial_build_size_cap: 1000  # Maximum initial build size
+
+output_path: "results/"
+recall_targets: [0.9, 0.95, 0.99] 

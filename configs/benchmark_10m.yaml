@@ -1,0 +1,22 @@
+# 10M vector benchmark configuration
+dataset_size: 10000000
+query_count: 100000
+dataset_path: null  # Use synthetic data
+
+dataset_generation:
+  enabled: true
+  distribution: "clustered"
+  dimension: 256  # Higher dimensionality for more realistic scenario
+  clusters: 1000
+  cluster_std: 0.12
+  k_neighbors: 100
+  seed: 42
+
+concurrent_inserters: 8
+concurrent_searchers: 16
+search_batch_size: 75
+insert_batch_size: 5000
+max_runtime_seconds: 900  # 15 minutes
+warmup_seconds: 45
+output_path: "results/"
+recall_targets: [0.9, 0.95, 0.99]

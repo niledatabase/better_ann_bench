@@ -1,0 +1,6 @@
+numpy>=1.21.0
+pyyaml>=6.0
+h5py>=3.0.0
+faiss-cpu>=1.7.0
+scikit-learn>=1.0.0
+psycopg2-binary>=2.9.0
