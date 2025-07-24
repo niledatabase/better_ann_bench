@@ -48,7 +48,11 @@ class ConcurrentBenchmark:
         local_query_count = 0
         query_idx = 0
         
-        while not self._stop_event.is_set() and query_idx < len(queries):
+        while not self._stop_event.is_set():
+            # Loop through queries repeatedly until timeout
+            if query_idx >= len(queries):
+                query_idx = 0  # Reset to start of queries
+            
             batch_end = min(query_idx + self.config.search_batch_size, len(queries))
             batch_queries = queries[query_idx:batch_end]
             
