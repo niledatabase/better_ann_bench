@@ -106,19 +106,19 @@ class ConcurrentBenchmark:
         if self.config.benchmark_mode == "search_only":
             print(f"Running in search-only mode")
             if hasattr(index, 'build') and len(workload.insert_vectors) > 0:
-                print(f"Building complete index with {len(workload.insert_vectors)} vectors")
+                print(f"Inserting {len(workload.insert_vectors)} vectors into index")
                 index.build(workload.insert_vectors)
-                print("Index build completed")
+                print("Vector insertion completed")
             
             # No remaining vectors since we built everything
             remaining_vectors = []
         else:  # hybrid mode
             print(f"Running in hybrid mode (concurrent inserts + searches)")
             if hasattr(index, 'build') and len(workload.insert_vectors) > 0:
-                # Build initial index with subset of vectors
+                # Insert initial vectors with subset of vectors
                 percentage_size = len(workload.insert_vectors) // (100 // self.config.initial_build_percentage)
                 initial_build_size = min(self.config.initial_build_size_cap, percentage_size)
-                print(f"Building initial index with {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})")
+                print(f"Inserting initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})")
                 index.build(workload.insert_vectors[:initial_build_size])
                 remaining_vectors = workload.insert_vectors[initial_build_size:]
             else:

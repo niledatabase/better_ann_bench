@@ -45,8 +45,12 @@ class PgVector(VectorIndex):
                     PRIMARY KEY (tenant_id, id)
                 )
             """)
-            
-            # Create HNSW index if not exists
+    
+    def _create_hnsw_index(self):
+        """Create the HNSW index after table is populated"""
+        conn = self._get_connection()
+        with conn.cursor() as cursor:
+            print(f"Creating HNSW index '{self.index_name}' (m={self.build_params.get('m', 16)}, ef_construction={self.build_params.get('ef_construction', 64)})")
             cursor.execute(f"""
                 CREATE INDEX IF NOT EXISTS {self.index_name} 
                 ON {self.table_name} 
@@ -54,12 +58,7 @@ class PgVector(VectorIndex):
                 WITH (m = {self.build_params.get('m', 16)}, 
                      ef_construction = {self.build_params.get('ef_construction', 64)})
             """)
-            
-            # Create tenant index for efficient filtering
-            cursor.execute(f"""
-                CREATE INDEX IF NOT EXISTS {self.table_name}_tenant_idx 
-                ON {self.table_name} (tenant_id)
-            """)
+            print(f"HNSW index '{self.index_name}' created successfully")
     
     def build(self, vectors: np.ndarray) -> None:
         with self.lock:
@@ -89,6 +88,9 @@ class PgVector(VectorIndex):
                     
                     if i % (batch_size * 10) == 0:
                         print(f"Inserted {i + len(batch)} vectors")
+                
+                # Create HNSW index after all vectors are inserted
+                self._create_hnsw_index()
     
     def insert(self, vectors: np.ndarray) -> None:
         with self.lock:
