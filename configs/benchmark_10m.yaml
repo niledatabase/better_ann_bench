@@ -17,5 +17,3 @@ concurrent_searchers: 16
 search_batch_size: 75
 insert_batch_size: 5000
 max_runtime_seconds: 900  # 15 minutes
-output_path: "results/"
-recall_targets: [0.9, 0.95, 0.99]

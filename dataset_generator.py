@@ -92,7 +92,7 @@ class DatasetGenerator:
         
         return np.vstack(all_neighbors)
     
-    def generate_dataset(self, output_path: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def generate_dataset(self, save_path: Optional[str] = None) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Generate complete dataset with train vectors, queries, and ground truth"""
         print(f"Generating {self.config.name} dataset:")
         print(f"  Size: {self.config.size:,} vectors")
@@ -118,19 +118,19 @@ class DatasetGenerator:
         print(f"Dataset generation completed in {generation_time:.2f} seconds")
         
         # Save to file if path provided
-        if output_path:
-            self._save_dataset(output_path, train_vectors, query_vectors, ground_truth)
+        if save_path:
+            self._save_dataset(save_path, train_vectors, query_vectors, ground_truth)
         
         return train_vectors, query_vectors, ground_truth
     
-    def _save_dataset(self, output_path: str, train_vectors: np.ndarray, 
+    def _save_dataset(self, save_path: str, train_vectors: np.ndarray, 
                      query_vectors: np.ndarray, ground_truth: np.ndarray):
         """Save dataset to HDF5 file"""
-        print(f"Saving dataset to {output_path}")
+        print(f"Saving dataset to {save_path}")
         
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         
-        with h5py.File(output_path, 'w') as f:
+        with h5py.File(save_path, 'w') as f:
             f.create_dataset('train', data=train_vectors, compression='gzip')
             f.create_dataset('test', data=query_vectors, compression='gzip')
             f.create_dataset('neighbors', data=ground_truth, compression='gzip')

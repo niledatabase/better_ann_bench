@@ -46,14 +46,7 @@ class BenchmarkConfig:
     initial_build_percentage: int = 10  # Percentage of dataset to build initially
     initial_build_size_cap: int = 1000  # Maximum initial build size
     
-    # Output settings
-    output_path: str = "results/"
-    recall_targets: list[float] = None
-    
-    def __post_init__(self):
-        if self.recall_targets is None:
-            self.recall_targets = [0.9, 0.95, 0.99]
-            
+    def __post_init__(self):            
         if self.dataset_path is None and self.dataset_generation is None:
             # Default to synthetic data generation
             self.dataset_generation = DatasetGenerationConfig(enabled=True)

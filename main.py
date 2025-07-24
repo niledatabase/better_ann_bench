@@ -185,7 +185,6 @@ def main():
     parser = argparse.ArgumentParser(description='Scalable Vector Benchmark')
     parser.add_argument('--config', required=True, help='Path to benchmark config YAML')
     parser.add_argument('--algorithm', required=True, help='Path to algorithm config YAML')
-    parser.add_argument('--output', help='Output path for results JSON')
     
     args = parser.parse_args()
     
@@ -229,22 +228,12 @@ def main():
     import os
     from datetime import datetime
     
-    if args.output:
-        save_results(results, args.output, algorithm_config.name)
-    elif benchmark_config.output_path:
-        # Use configured output path with timestamp
-        os.makedirs(benchmark_config.output_path, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        algorithm_name = algorithm_config.name.lower().replace('-', '_')
-        output_file = os.path.join(benchmark_config.output_path, f"{algorithm_name}_{timestamp}.json")
-        save_results(results, output_file, algorithm_config.name)
-    else:
-        # Always save results even if no output path configured
-        os.makedirs("results", exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        algorithm_name = algorithm_config.name.lower().replace('-', '_')
-        output_file = os.path.join("results", f"{algorithm_name}_{timestamp}.json")
-        save_results(results, output_file, algorithm_config.name)
+    # Always save results even if no output path configured
+    os.makedirs("results", exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    algorithm_name = algorithm_config.name.lower().replace('-', '_')
+    output_file = os.path.join("results", f"{algorithm_name}_{timestamp}.json")
+    save_results(results, output_file, algorithm_config.name)
 
 
 if __name__ == '__main__':
