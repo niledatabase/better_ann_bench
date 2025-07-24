@@ -125,22 +125,28 @@ class PgVector(VectorIndex):
             # Create the table
             self._create_table(self.dimension, cursor)
             
-            # Insert vectors in batches
-            batch_size = self.build_params.get('batch_size', 1000)
-            for i in range(0, len(vectors), batch_size):
-                batch = vectors[i:i + batch_size]
+            # Insert vectors using multi-row inserts (100 rows at a time)
+            multi_row_size = 100
+            
+            for chunk_start in range(0, len(vectors), multi_row_size):
+                chunk = vectors[chunk_start:chunk_start + multi_row_size]
                 
-                for j, vector in enumerate(batch):
+                # Prepare multi-row insert data
+                values_list = []
+                for j, vector in enumerate(chunk):
                     vector_list = vector.tolist()
-                    vector_index = i + j  # This ensures the ID is the exact index in the input array
-                    
-                    cursor.execute(
-                        f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES (%s, %s, %s::vector)",
-                        (vector_index, self.tenant_id, vector_list)
-                    )
+                    vector_index = chunk_start + j  # This ensures the ID is the exact index in the input array
+                    values_list.append((vector_index, self.tenant_id, vector_list))
                 
-                if i % (batch_size * 10) == 0:
-                    print(f"Inserted {i + len(batch)} vectors")
+                # Execute multi-row insert
+                args_str = ','.join(cursor.mogrify(
+                    f"(%s, %s, %s::vector)", 
+                    (id_val, tenant_val, vector_val)
+                ).decode('utf-8') for id_val, tenant_val, vector_val in values_list)
+                
+                cursor.execute(f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES {args_str}")
+                
+                print(f"Inserted {(chunk_start + len(chunk))} vectors")
             
             # Create HNSW index after all vectors are inserted
             self._create_hnsw_index(cursor)
@@ -161,13 +167,26 @@ class PgVector(VectorIndex):
         
         conn = self._get_connection()
         with conn.cursor() as cursor:
-            for i, vector in enumerate(vectors):
-                vector_list = vector.tolist()
+            # Insert vectors using multi-row inserts (100 rows at a time)
+            multi_row_size = 100
+            
+            for i in range(0, len(vectors), multi_row_size):
+                chunk = vectors[i:i + multi_row_size]
                 
-                cursor.execute(
-                    f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES (%s, %s, %s::vector, %s)",
-                    (i, self.tenant_id, vector_list)
-                )
+                # Prepare multi-row insert data
+                values_list = []
+                for j, vector in enumerate(chunk):
+                    vector_list = vector.tolist()
+                    vector_index = i + j  # This ensures the ID is the exact index in the input array
+                    values_list.append((vector_index, self.tenant_id, vector_list))
+                
+                # Execute multi-row insert
+                args_str = ','.join(cursor.mogrify(
+                    f"(%s, %s, %s::vector)", 
+                    (id_val, tenant_val, vector_val)
+                ).decode('utf-8') for id_val, tenant_val, vector_val in values_list)
+                
+                cursor.execute(f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES {args_str}")
     
     def search(self, query: np.ndarray, k: int) -> np.ndarray:
         # Initialize thread-local connection and cursor for this worker (only once per thread)
