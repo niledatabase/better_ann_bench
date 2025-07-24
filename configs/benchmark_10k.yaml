@@ -16,7 +16,6 @@ concurrent_searchers: 4
 search_batch_size: 10
 insert_batch_size: 100
 max_runtime_seconds: 60
-warmup_seconds: 5
 benchmark_mode: "search_only"  # "search_only" or "hybrid"
 
 # Hybrid mode settings (used when benchmark_mode is "hybrid")

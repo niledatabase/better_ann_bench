@@ -32,7 +32,6 @@ class BenchmarkConfig:
     
     # Runtime settings
     max_runtime_seconds: int = 300
-    warmup_seconds: int = 10
     
     # Benchmark mode
     benchmark_mode: str = "search_only"  # "search_only" or "hybrid"
