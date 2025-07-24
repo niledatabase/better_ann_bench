@@ -6,8 +6,8 @@ dataset_path: null  # Use synthetic data
 dataset_generation:
   enabled: true
   dimension: 128
-  clusters: 5
-  cluster_std: 0.2
+  clusters: 50
+  cluster_std: 0.1
   k_neighbors: 100
   seed: 42
 

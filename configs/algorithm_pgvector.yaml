@@ -15,6 +15,6 @@ build_params:
   ef_construction: 64
   reuse_table: false  # If true, skip data loading and index creation
 search_params:
-  ef: 100
+  ef: 400
 supports_concurrent_insert: true
 supports_incremental_build: true 

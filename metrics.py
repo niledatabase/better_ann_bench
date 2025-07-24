@@ -2,7 +2,7 @@ import time
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 import statistics
@@ -29,6 +29,11 @@ class BenchmarkResults:
     total_inserts: int
     runtime_seconds: float
     dataset_size: int
+    search_params: Dict[str, Any]
+    # Concurrency information
+    concurrent_searchers: int
+    concurrent_inserters: int
+    benchmark_mode: str
 
 
 class MetricsCollector:
@@ -40,6 +45,16 @@ class MetricsCollector:
         self._lock = threading.Lock()
         self._start_time = None
         self._end_time = None
+        # Concurrency information
+        self._concurrent_searchers: int = 0
+        self._concurrent_inserters: int = 0
+        self._benchmark_mode: str = "search_only"
+        
+    def set_concurrency_info(self, concurrent_searchers: int, concurrent_inserters: int, benchmark_mode: str):
+        """Set concurrency information for the benchmark"""
+        self._concurrent_searchers = concurrent_searchers
+        self._concurrent_inserters = concurrent_inserters
+        self._benchmark_mode = benchmark_mode
         
     def start_timing(self):
         self._start_time = time.time()
@@ -107,7 +122,7 @@ class MetricsCollector:
             
         return total_recall / len(results)
     
-    def get_results(self, recall: float, dataset_size: int) -> BenchmarkResults:
+    def get_results(self, recall: float, dataset_size: int, search_params: Dict[str, Any]) -> BenchmarkResults:
         search_latencies = self._calculate_latency_metrics(self._search_latencies)
         insert_latencies = self._calculate_latency_metrics(self._insert_latencies) if self._insert_latencies else None
         
@@ -125,5 +140,9 @@ class MetricsCollector:
             total_queries=len(self._search_latencies),
             total_inserts=len(self._insert_latencies),
             runtime_seconds=runtime,
-            dataset_size=dataset_size
+            dataset_size=dataset_size,
+            search_params=search_params,
+            concurrent_searchers=self._concurrent_searchers,
+            concurrent_inserters=self._concurrent_inserters,
+            benchmark_mode=self._benchmark_mode
         )

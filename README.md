@@ -11,6 +11,7 @@ A comprehensive benchmark for vector search algorithms, currently supporting Pos
 - **Comprehensive metrics**: Recall, QPS, latency percentiles
 - **Configurable initial batch size**: For hybrid mode optimization
 - **Automatic results saving**: Timestamped JSON files
+- **Concurrency tracking**: Worker counts and benchmark mode recorded in results
 
 ## Quick Start
 
@@ -210,6 +211,42 @@ results/
 └── ...
 ```
 
+### Results Format
+
+Each results file contains comprehensive performance metrics and configuration information:
+
+```json
+{
+  "algorithm": "Nile-pgvector",
+  "dataset_size": 10000,
+  "recall": 0.9542,
+  "search_latencies": {
+    "p50": 1.25,
+    "p95": 2.45,
+    "p99": 3.12,
+    "mean": 1.38,
+    "min": 0.85,
+    "max": 4.23
+  },
+  "search_qps": 724.6,
+  "insert_qps": 0.0,
+  "total_queries": 43476,
+  "total_inserts": 0,
+  "runtime_seconds": 60.0,
+  "concurrency": {
+    "concurrent_searchers": 8,
+    "concurrent_inserters": 4,
+    "benchmark_mode": "search_only"
+  }
+}
+```
+
+**Key Metrics:**
+- **Performance**: QPS, latency percentiles, recall
+- **Concurrency**: Number of search and insert workers
+- **Benchmark Mode**: "search_only" or "hybrid"
+- **Dataset Info**: Size and runtime information
+
 ## Examples
 
 ### Small Dataset Benchmark
@@ -305,4 +342,4 @@ DROP INDEX IF EXISTS vectors_tenant_idx;
 
 -- Drop the table
 DROP TABLE IF EXISTS vectors;
-``` 
+```

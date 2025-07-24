@@ -103,6 +103,13 @@ class ConcurrentBenchmark:
         print(f"Concurrent inserters: {self.config.concurrent_inserters}")
         print(f"Concurrent searchers: {self.config.concurrent_searchers}")
         
+        # Set concurrency information in metrics collector
+        self.metrics.set_concurrency_info(
+            concurrent_searchers=self.config.concurrent_searchers,
+            concurrent_inserters=self.config.concurrent_inserters,
+            benchmark_mode=self.config.benchmark_mode
+        )
+        
         # Check if we should reuse existing table
         reuse_table = getattr(index, 'reuse_table', False)
         if reuse_table:
@@ -182,18 +189,23 @@ class ConcurrentBenchmark:
         
         self.metrics.end_timing()
         
-        # Calculate recall on a sample of queries
-        sample_size = min(100, len(workload.search_queries))
-        sample_indices = random.sample(range(len(workload.search_queries)), sample_size)
+        # Calculate recall by running all queries once:
         
         recall_sum = 0.0
-        for idx in sample_indices:
+        print(f"Calculating recall on {len(workload.search_queries)} queries with k={workload.k}")
+        
+        # Calculate recall for all queries
+        for idx in range(len(workload.search_queries)):
             query = workload.search_queries[idx]
             results = index.search(query, workload.k)
             ground_truth = workload.ground_truth[idx]
             recall = self.metrics.calculate_recall(ground_truth, results, workload.k, workload.insert_vectors)
             recall_sum += recall
             
-        average_recall = recall_sum / sample_size
+        average_recall = recall_sum / len(workload.search_queries)
         
-        return self.metrics.get_results(average_recall, len(workload.insert_vectors))
+        return self.metrics.get_results(
+            average_recall, 
+            len(workload.insert_vectors),
+            self.algorithm_config.search_params
+        )

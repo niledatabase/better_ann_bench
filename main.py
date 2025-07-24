@@ -130,7 +130,14 @@ def save_results(results: BenchmarkResults, output_path: str, algorithm_name: st
         'insert_qps': results.insert_qps,
         'total_queries': results.total_queries,
         'total_inserts': results.total_inserts,
-        'runtime_seconds': results.runtime_seconds
+        'runtime_seconds': results.runtime_seconds,
+        'search_params': results.search_params,
+        # Concurrency information
+        'concurrency': {
+            'concurrent_searchers': results.concurrent_searchers,
+            'concurrent_inserters': results.concurrent_inserters,
+            'benchmark_mode': results.benchmark_mode
+        }
     }
     
     if results.insert_latencies:
@@ -155,6 +162,9 @@ def print_results(results: BenchmarkResults, algorithm_name: str):
     print(f"Dataset Size: {results.dataset_size:,} vectors")
     print(f"Runtime: {results.runtime_seconds:.2f} seconds")
     print(f"Recall: {results.recall:.4f}")
+    print(f"Search Parameters: {results.search_params}")
+    print(f"Benchmark Mode: {results.benchmark_mode}")
+    print(f"Concurrency: {results.concurrent_searchers} searchers, {results.concurrent_inserters} inserters")
     print(f"\nSearch Performance:")
     print(f"  QPS: {results.search_qps:.2f}")
     print(f"  Total Queries: {results.total_queries}")

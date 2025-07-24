@@ -221,6 +221,8 @@ class PgVector(VectorIndex):
                 self._thread_local.connection.autocommit = True
                 self._thread_local.cursor = self._thread_local.connection.cursor()
                 self._thread_local.cursor.execute(f"SET nile.tenant_id = '{self.tenant_id}';")
+                ef_search = self.search_params.get('ef', 100)
+                self._thread_local.cursor.execute(f"SET hnsw.ef_search = {ef_search};")
             except Exception as e:
                 raise RuntimeError(f"Failed to connect to PostgreSQL: {e}")
         
@@ -228,17 +230,15 @@ class PgVector(VectorIndex):
             raise RuntimeError("Index not built yet")
         
         cursor = self._thread_local.cursor
+
         query_vector = query.tolist()
-        # Convert to string format for vector casting
-        query_vector_str = str(query_vector).replace(' ', '')
         
         cursor.execute(f"""
             SELECT original_index 
             FROM {self.table_name} 
-            WHERE tenant_id = %s
             ORDER BY vector <-> %s::vector 
             LIMIT %s
-        """, (self.tenant_id, query_vector_str, k))
+        """, (query_vector, k))
         
         results = cursor.fetchall()
         return np.array([row[0] for row in results])
