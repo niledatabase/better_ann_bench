@@ -267,4 +267,42 @@ To add a new vector search algorithm:
 - Check logs for detailed error messages
 - Verify database connectivity
 - Ensure pgvector extension is installed
-- Check tenant ID configuration for Nile Cloud 
+- Check tenant ID configuration for Nile Cloud
+
+## Database Cleanup
+
+After running benchmarks, you may want to clean up the database tables and indexes. A cleanup script is provided for this purpose:
+
+### Using the Cleanup Script
+
+```bash
+# Basic cleanup (uses default config)
+python cleanup_pgvector.py
+
+# With custom config file
+python cleanup_pgvector.py --config path/to/your/config.yaml
+
+# With custom table/index names
+python cleanup_pgvector.py --table my_vectors --index my_index
+```
+
+### What the Cleanup Script Does
+
+The script will:
+1. Connect to the database using connection parameters from the config
+2. Drop the HNSW index (`vectors_hnsw_idx`)
+3. Drop the tenant index (`vectors_tenant_idx`)
+4. Drop the vectors table (`vectors`)
+
+### Manual Cleanup
+
+If you prefer to clean up manually via SQL:
+
+```sql
+-- Drop indexes first
+DROP INDEX IF EXISTS vectors_hnsw_idx;
+DROP INDEX IF EXISTS vectors_tenant_idx;
+
+-- Drop the table
+DROP TABLE IF EXISTS vectors;
+``` 
