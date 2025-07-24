@@ -41,7 +41,10 @@ class BenchmarkConfig:
     
     # Benchmark mode
     benchmark_mode: str = "search_only"  # "search_only" or "hybrid"
-
+    
+    # Hybrid mode settings
+    initial_build_percentage: int = 10  # Percentage of dataset to build initially
+    initial_build_size_cap: int = 1000  # Maximum initial build size
     
     # Output settings
     output_path: str = "results/"
@@ -58,7 +61,6 @@ class BenchmarkConfig:
     @property
     def dataset_mode(self) -> DatasetMode:
         """Determine the dataset mode based on configuration"""
-        #print(f"dataset_path: {self.dataset_path}")
         if self.dataset_path is not None:
             return DatasetMode.LOAD_FROM_FILE
         else:

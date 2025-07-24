@@ -29,7 +29,6 @@ class PgVector(VectorIndex):
         self.dimension = None
         self.lock = threading.RLock()
         self._connection = None
-        self._inserted_vectors = []
         self._id_counter = 0
         # Thread-local storage for worker connections
         self._thread_local = threading.local()
@@ -53,7 +52,6 @@ class PgVector(VectorIndex):
                     id INTEGER,
                     tenant_id UUID NOT NULL,
                     vector vector({dimension}),
-                    original_index INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (tenant_id, id)
                 )
@@ -132,19 +130,14 @@ class PgVector(VectorIndex):
             for i in range(0, len(vectors), batch_size):
                 batch = vectors[i:i + batch_size]
                 
-                for i, vector in enumerate(batch):
+                for j, vector in enumerate(batch):
                     vector_list = vector.tolist()
-                    with self.lock:
-                        # original_index should be the position in the training set
-                        original_index = len(self._inserted_vectors)
-                        db_id = self._id_counter + 1
-                        self._id_counter += 1
+                    vector_index = i + j  # This ensures the ID is the exact index in the input array
                     
                     cursor.execute(
-                        f"INSERT INTO {self.table_name} (id, tenant_id, vector, original_index) VALUES (%s, %s, %s::vector, %s)",
-                        (db_id, self.tenant_id, vector_list, original_index)
+                        f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES (%s, %s, %s::vector)",
+                        (vector_index, self.tenant_id, vector_list)
                     )
-                    self._inserted_vectors.append(original_index)
                 
                 if i % (batch_size * 10) == 0:
                     print(f"Inserted {i + len(batch)} vectors")
@@ -170,16 +163,11 @@ class PgVector(VectorIndex):
         with conn.cursor() as cursor:
             for i, vector in enumerate(vectors):
                 vector_list = vector.tolist()
-                with self.lock:
-                    original_index = len(self._inserted_vectors)
-                    db_id = self._id_counter + 1
-                    self._id_counter += 1
                 
                 cursor.execute(
-                    f"INSERT INTO {self.table_name} (id, tenant_id, vector, original_index) VALUES (%s, %s, %s::vector, %s)",
-                    (db_id, self.tenant_id, vector_list, original_index)
+                    f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES (%s, %s, %s::vector, %s)",
+                    (i, self.tenant_id, vector_list)
                 )
-                self._inserted_vectors.append(original_index)
     
     def search(self, query: np.ndarray, k: int) -> np.ndarray:
         # Initialize thread-local connection and cursor for this worker (only once per thread)
@@ -202,7 +190,7 @@ class PgVector(VectorIndex):
         query_vector = query.tolist()
         
         cursor.execute(f"""
-            SELECT original_index 
+            SELECT id
             FROM {self.table_name} 
             ORDER BY vector <-> %s::vector 
             LIMIT %s
