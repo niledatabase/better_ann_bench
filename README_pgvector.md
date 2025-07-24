@@ -49,9 +49,51 @@ The pgvector implementation supports the following parameters:
 - `batch_size`: Number of vectors to insert in each batch (default: 1000)
 - `m`: HNSW index parameter for number of connections per layer (default: 16)
 - `ef_construction`: HNSW index parameter for search depth during construction (default: 64)
+- `reuse_table`: If true, skip data loading and index creation, use existing table (default: false)
 
 **Search Parameters**:
 - `ef`: HNSW search parameter for search depth (default: 100)
+
+## Reusing Existing Tables
+
+The pgvector implementation supports reusing existing tables with the `reuse_table` parameter. This is useful when you want to:
+
+1. **Skip data loading**: Avoid the time-consuming process of inserting vectors
+2. **Use pre-built indexes**: Leverage existing HNSW indexes
+3. **Focus on search performance**: Benchmark only the search operations
+
+### Configuration
+
+To enable table reuse, set `reuse_table: true` in your algorithm configuration:
+
+```yaml
+build_params:
+  # ... other parameters ...
+  reuse_table: true  # Skip data loading and index creation
+```
+
+### Example Usage
+
+1. **First run**: Load data and create index
+   ```bash
+   python main.py --config configs/benchmark_10k.yaml --algorithm configs/algorithm_pgvector.yaml
+   ```
+
+2. **Subsequent runs**: Reuse existing table
+   ```bash
+   python main.py --config configs/benchmark_10k.yaml --algorithm configs/algorithm_pgvector_reuse.yaml
+   ```
+
+### Requirements
+
+When using `reuse_table: true`, ensure that:
+
+1. The table exists in the database
+2. The table has the correct schema with `vector` column
+3. The table contains vectors for the specified `tenant_id`
+4. The vectors have the expected dimension
+
+The implementation will automatically verify these requirements and provide helpful error messages if they're not met.
 
 ## Available Benchmarks
 

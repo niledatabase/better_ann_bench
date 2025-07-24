@@ -103,23 +103,35 @@ class ConcurrentBenchmark:
         print(f"Concurrent inserters: {self.config.concurrent_inserters}")
         print(f"Concurrent searchers: {self.config.concurrent_searchers}")
         
+        # Check if we should reuse existing table
+        reuse_table = getattr(index, 'reuse_table', False)
+        if reuse_table:
+            print(f"Reuse table mode enabled - skipping data loading and insert operations")
+        
         if self.config.benchmark_mode == "search_only":
             print(f"Running in search-only mode")
-            if hasattr(index, 'build') and len(workload.insert_vectors) > 0:
+            if hasattr(index, 'build') and len(workload.insert_vectors) > 0 and not reuse_table:
                 print(f"Inserting and indexing {len(workload.insert_vectors)} vectors")
                 index.build(workload.insert_vectors)
+            elif reuse_table:
+                print(f"Building index for existing table (no data insertion)")
+                index.build(workload.insert_vectors)  # This will just verify table exists
             
-            # No remaining vectors since we built everything
+            # No remaining vectors since we built everything or reusing table
             remaining_vectors = []
         else:  # hybrid mode
             print(f"Running in hybrid mode (concurrent inserts + searches)")
-            if hasattr(index, 'build') and len(workload.insert_vectors) > 0:
+            if hasattr(index, 'build') and len(workload.insert_vectors) > 0 and not reuse_table:
                 # Insert initial vectors with subset of vectors
                 percentage_size = len(workload.insert_vectors) // (100 // self.config.initial_build_percentage)
                 initial_build_size = min(self.config.initial_build_size_cap, percentage_size)
                 print(f"Inserting and indexing initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})...")
                 index.build(workload.insert_vectors[:initial_build_size])
                 remaining_vectors = workload.insert_vectors[initial_build_size:]
+            elif reuse_table:
+                print(f"Building index for existing table (no data insertion)")
+                index.build(workload.insert_vectors)  # This will just verify table exists
+                remaining_vectors = []  # No vectors to insert in reuse mode
             else:
                 remaining_vectors = workload.insert_vectors
         
@@ -137,7 +149,7 @@ class ConcurrentBenchmark:
             futures: List[Future] = []
             
             # Start insert workers (if in hybrid mode and there are vectors to insert)
-            if self.config.benchmark_mode == "hybrid" and len(remaining_vectors) > 0:
+            if self.config.benchmark_mode == "hybrid" and len(remaining_vectors) > 0 and not reuse_table:
                 for i in range(self.config.concurrent_inserters):
                     start_idx = i * vectors_per_inserter
                     end_idx = start_idx + vectors_per_inserter if i < self.config.concurrent_inserters - 1 else len(remaining_vectors)

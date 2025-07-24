@@ -1,4 +1,4 @@
-name: "Nile-pgvector"
+name: "Nile-pgvector-reuse"
 implementation: "pgvector"
 build_params:
   connection_params:
@@ -13,7 +13,7 @@ build_params:
   batch_size: 1000
   m: 16
   ef_construction: 64
-  reuse_table: false  # If true, skip data loading and index creation
+  reuse_table: true  # Skip data loading and index creation, use existing table
 search_params:
   ef: 100
 supports_concurrent_insert: true
