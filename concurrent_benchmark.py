@@ -2,12 +2,12 @@ import time
 import threading
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, Future
-from typing import List, Tuple, Protocol, Any
+from typing import List, Tuple, Protocol, Any, Optional
 from abc import abstractmethod
 import random
 from dataclasses import dataclass
 
-from benchmark_config import BenchmarkConfig, AlgorithmConfig
+from benchmark_config import BenchmarkConfig, AlgorithmConfig, DatasetMode
 from metrics import MetricsCollector, BenchmarkResults
 
 
@@ -33,7 +33,7 @@ class VectorIndex(Protocol):
 class WorkloadSpec:
     insert_vectors: np.ndarray
     search_queries: np.ndarray
-    ground_truth: np.ndarray
+    ground_truth: Optional[np.ndarray] = None
     k: int = 10
 
 
@@ -110,37 +110,21 @@ class ConcurrentBenchmark:
             benchmark_mode=self.config.benchmark_mode
         )
         
-        # Check if we should reuse existing table
-        reuse_table = getattr(index, 'reuse_table', False)
-        if reuse_table:
-            print(f"Reuse table mode enabled - skipping data loading and insert operations")
-        
         if self.config.benchmark_mode == "search_only":
             print(f"Running in search-only mode")
-            if hasattr(index, 'build') and len(workload.insert_vectors) > 0 and not reuse_table:
-                print(f"Inserting and indexing {len(workload.insert_vectors)} vectors")
-                index.build(workload.insert_vectors)
-            elif reuse_table:
-                print(f"Building index for existing table (no data insertion)")
-                index.build(workload.insert_vectors)  # This will just verify table exists
+            ## Reuse logic belongs to the algorithm, so its contained in the build method
+            index.build(workload.insert_vectors)
             
             # No remaining vectors since we built everything or reusing table
-            remaining_vectors = []
+            remaining_vectors = workload.insert_vectors
         else:  # hybrid mode
             print(f"Running in hybrid mode (concurrent inserts + searches)")
-            if hasattr(index, 'build') and len(workload.insert_vectors) > 0 and not reuse_table:
-                # Insert initial vectors with subset of vectors
-                percentage_size = len(workload.insert_vectors) // (100 // self.config.initial_build_percentage)
-                initial_build_size = min(self.config.initial_build_size_cap, percentage_size)
-                print(f"Inserting and indexing initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})...")
-                index.build(workload.insert_vectors[:initial_build_size])
-                remaining_vectors = workload.insert_vectors[initial_build_size:]
-            elif reuse_table:
-                print(f"Building index for existing table (no data insertion)")
-                index.build(workload.insert_vectors)  # This will just verify table exists
-                remaining_vectors = []  # No vectors to insert in reuse mode
-            else:
-                remaining_vectors = workload.insert_vectors
+            # Insert initial vectors with subset of vectors
+            percentage_size = len(workload.insert_vectors) // (100 // self.config.initial_build_percentage)
+            initial_build_size = min(self.config.initial_build_size_cap, percentage_size)
+            print(f"Inserting and indexing initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})...")
+            index.build(workload.insert_vectors[:initial_build_size])
+            remaining_vectors = workload.insert_vectors[initial_build_size:]
         
         # Split vectors and queries among workers
         vectors_per_inserter = len(remaining_vectors) // max(1, self.config.concurrent_inserters)
@@ -189,11 +173,10 @@ class ConcurrentBenchmark:
         
         self.metrics.end_timing()
         
-        # Calculate recall by running all queries once:
-        
+
         recall_sum = 0.0
         print(f"Calculating recall on {len(workload.search_queries)} queries with k={workload.k}")
-        
+            
         # Calculate recall for all queries
         for idx in range(len(workload.search_queries)):
             query = workload.search_queries[idx]
@@ -201,7 +184,7 @@ class ConcurrentBenchmark:
             ground_truth = workload.ground_truth[idx]
             recall = self.metrics.calculate_recall(ground_truth, results, workload.k, workload.insert_vectors)
             recall_sum += recall
-            
+                
         average_recall = recall_sum / len(workload.search_queries)
         
         return self.metrics.get_results(

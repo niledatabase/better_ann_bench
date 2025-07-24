@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 import importlib.util
 
-from benchmark_config import BenchmarkConfig, AlgorithmConfig, DatasetGenerationConfig
+from benchmark_config import BenchmarkConfig, AlgorithmConfig, DatasetGenerationConfig, DatasetMode
 from concurrent_benchmark import ConcurrentBenchmark, VectorIndex, WorkloadSpec
 from metrics import BenchmarkResults
 from dataset_generator import DatasetGenerator, DatasetConfig
@@ -40,15 +40,6 @@ def load_algorithm(algorithm_config: AlgorithmConfig) -> VectorIndex:
     except Exception as e:
         print(f"Failed to load algorithm {algorithm_config.implementation}: {e}")
         sys.exit(1)
-
-
-def load_or_generate_dataset(config: BenchmarkConfig) -> WorkloadSpec:
-    """Load existing dataset or generate synthetic data"""
-    
-    if config.use_synthetic_data:
-        return generate_synthetic_dataset(config)
-    else:
-        return load_existing_dataset(config.dataset_path)
 
 
 def generate_synthetic_dataset(config: BenchmarkConfig) -> WorkloadSpec:
@@ -94,13 +85,23 @@ def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
         with h5py.File(dataset_path, 'r') as f:
             train_data = f['train'][:]
             test_data = f['test'][:]
-            neighbors = f['neighbors'][:]
+            # Try to load neighbors, but don't fail if they don't exist
+            try:
+                neighbors = f['neighbors'][:]
+            except KeyError:
+                print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
+                neighbors = None
     except ImportError:
         print("h5py not available, trying numpy format")
         data = np.load(dataset_path, allow_pickle=True)
         train_data = data['train']
         test_data = data['test'] 
-        neighbors = data['neighbors']
+        # Try to load neighbors, but don't fail if they don't exist
+        try:
+            neighbors = data['neighbors']
+        except KeyError:
+            print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
+            neighbors = None
     
     print(f"Loaded dataset: {len(train_data)} training vectors, {len(test_data)} test queries")
     
@@ -161,7 +162,10 @@ def print_results(results: BenchmarkResults, algorithm_name: str):
     print(f"\n=== Benchmark Results for {algorithm_name} ===")
     print(f"Dataset Size: {results.dataset_size:,} vectors")
     print(f"Runtime: {results.runtime_seconds:.2f} seconds")
-    print(f"Recall: {results.recall:.4f}")
+    if results.recall is not None:
+        print(f"Recall: {results.recall:.4f}")
+    else:
+        print(f"Recall: Not calculated (no ground truth available)")
     print(f"Search Parameters: {results.search_params}")
     print(f"Benchmark Mode: {results.benchmark_mode}")
     print(f"Concurrency: {results.concurrent_searchers} searchers, {results.concurrent_inserters} inserters")
@@ -191,20 +195,36 @@ def main():
         import yaml
         algorithm_data = yaml.safe_load(f)
         algorithm_config = AlgorithmConfig(**algorithm_data)
-    
-    # Load or generate dataset
-    workload = load_or_generate_dataset(benchmark_config)
-    
+        
+    #print("=== Benchmark Configuration ===")
+    #print(json.dumps(benchmark_config.__dict__, indent=2))
+    #print("\n=== Algorithm Configuration ===")
+    #print(json.dumps(algorithm_config.__dict__, indent=2))
+
+    # light validations of config consistency:
+    if algorithm_config.build_params.get('reuse_table', False) and benchmark_config.concurrent_inserters > 0:
+        raise ValueError("Reuse table mode is not supported with concurrent insert workers. Please set concurrent_inserters to 0.")
+    if algorithm_config.build_params.get('reuse_table', False) and benchmark_config.dataset_mode == DatasetMode.GENERATE_SYNTHETIC:
+        raise ValueError("Reuse table mode is not supported with synthetic data generation. Please make sure dataset_path is set to a file.")
+
+    # Load dataset
+    if benchmark_config.dataset_mode == DatasetMode.GENERATE_SYNTHETIC:
+        workload = generate_synthetic_dataset(benchmark_config)
+    elif benchmark_config.dataset_mode == DatasetMode.LOAD_FROM_FILE:
+        workload = load_existing_dataset(benchmark_config.dataset_path)
+    else:
+        raise ValueError(f"Invalid dataset mode: {benchmark_config.dataset_mode}")
+
     # Load algorithm
     algorithm = load_algorithm(algorithm_config)
-    
+
     # Run benchmark
     benchmark = ConcurrentBenchmark(benchmark_config, algorithm_config)
     results = benchmark.run_benchmark(algorithm, workload)
-    
+
     # Output results
     print_results(results, algorithm_config.name)
-    
+
     # Save results with timestamp
     import os
     from datetime import datetime

@@ -20,7 +20,7 @@ class LatencyMetrics:
 
 @dataclass
 class BenchmarkResults:
-    recall: float
+    recall: Optional[float]
     search_latencies: LatencyMetrics
     insert_latencies: Optional[LatencyMetrics]
     search_qps: float
@@ -122,7 +122,7 @@ class MetricsCollector:
             
         return total_recall / len(results)
     
-    def get_results(self, recall: float, dataset_size: int, search_params: Dict[str, Any]) -> BenchmarkResults:
+    def get_results(self, recall: Optional[float], dataset_size: int, search_params: Dict[str, Any]) -> BenchmarkResults:
         search_latencies = self._calculate_latency_metrics(self._search_latencies)
         insert_latencies = self._calculate_latency_metrics(self._insert_latencies) if self._insert_latencies else None
         

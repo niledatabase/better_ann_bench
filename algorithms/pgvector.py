@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import threading
 import psycopg2
 import psycopg2.extras
@@ -43,13 +44,12 @@ class PgVector(VectorIndex):
                 raise RuntimeError(f"Failed to connect to PostgreSQL: {e}")
         return self._connection
     
-    def _ensure_table_exists(self, dimension: int):
-        """Create the vectors table if it doesn't exist"""
-        conn = self._get_connection()
-        with conn.cursor() as cursor:
-            # Create table if not exists
+    def _create_table(self, dimension: int, cursor):
+        """Create the vectors table  - it should fail if the table already exists"""
+        print(f"Creating table '{self.table_name}' with dimension {dimension}")
+        try:    
             cursor.execute(f"""
-                CREATE TABLE IF NOT EXISTS {self.table_name} (
+                CREATE TABLE {self.table_name} (
                     id INTEGER,
                     tenant_id UUID NOT NULL,
                     vector vector({dimension}),
@@ -58,97 +58,75 @@ class PgVector(VectorIndex):
                     PRIMARY KEY (tenant_id, id)
                 )
             """)
+        except psycopg2.errors.DuplicateTable:
+            print(f"Table '{self.table_name}' already exists. You either forgot to use the cleanup script or failed to set the reuse_table flag to false")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Failed to create table '{self.table_name}': {e}")
+            raise e
     
-    def _create_hnsw_index(self):
+    def _create_hnsw_index(self, cursor):
         """Create the HNSW index after table is populated"""
-        conn = self._get_connection()
-        with conn.cursor() as cursor:
-            print(f"Creating HNSW index '{self.index_name}' (m={self.build_params.get('m', 16)}, ef_construction={self.build_params.get('ef_construction', 64)})")
-            cursor.execute(f"""
-                CREATE INDEX IF NOT EXISTS {self.index_name} 
-                ON {self.table_name} 
-                USING hnsw (vector vector_l2_ops)
-                WITH (m = {self.build_params.get('m', 16)}, 
-                     ef_construction = {self.build_params.get('ef_construction', 64)})
-            """)
-            print(f"HNSW index '{self.index_name}' created successfully")
+        print(f"Creating HNSW index '{self.index_name}' (m={self.build_params.get('m', 16)}, ef_construction={self.build_params.get('ef_construction', 64)})")
+        cursor.execute(f"""
+            CREATE INDEX IF NOT EXISTS {self.index_name} 
+            ON {self.table_name} 
+            USING hnsw (vector vector_l2_ops)
+            WITH (m = {self.build_params.get('m', 16)}, 
+                ef_construction = {self.build_params.get('ef_construction', 64)})
+        """)
+        print(f"HNSW index '{self.index_name}' created successfully")
     
-    def _verify_existing_table(self) -> None:
+    def _verify_existing_table(self, file_dimension: int) -> None:
         """Verify that the existing table exists and has the correct structure"""
         conn = self._get_connection()
         with conn.cursor() as cursor:
-            # Check if table exists and get its dimension
-            cursor.execute(f"""
-                SELECT column_name, data_type 
-                FROM information_schema.columns 
-                WHERE table_name = %s AND column_name = 'vector'
-            """, (self.table_name,))
-            
-            result = cursor.fetchone()
-            if not result:
-                raise RuntimeError(f"Table '{self.table_name}' does not exist or has no vector column")
-            
-            # Get the dimension from the vector column type
-            cursor.execute(f"""
-                SELECT vector[1:1] IS NOT NULL as has_vectors
-                FROM {self.table_name} 
-                WHERE tenant_id = %s 
-                LIMIT 1
-            """, (self.tenant_id,))
-            
-            result = cursor.fetchone()
-            if not result:
-                raise RuntimeError(f"No vectors found in table '{self.table_name}' for tenant '{self.tenant_id}'")
-            
-            # Get the actual dimension by examining a vector
-            cursor.execute(f"""
-                SELECT array_length(vector, 1) as dimension
-                FROM {self.table_name} 
-                WHERE tenant_id = %s 
-                LIMIT 1
-            """, (self.tenant_id,))
-            
-            result = cursor.fetchone()
-            if result:
-                self.dimension = result[0]
-                print(f"Using existing table with dimension {self.dimension}")
-            else:
-                raise RuntimeError(f"Could not determine vector dimension from table '{self.table_name}'")
+            try:
+                # Get a vector to check its dimensions
+                cursor.execute(f"""
+                    SELECT vector 
+                    FROM {self.table_name} 
+                    WHERE tenant_id = %s 
+                    LIMIT 1
+                """, (self.tenant_id,))
+                
+                result = cursor.fetchone()
+                if result is None:
+                    raise RuntimeError(f"No vectors found in table '{self.table_name}' for tenant '{self.tenant_id}'")
+                
+                # Get the vector and check its dimensions
+
+                from ast import literal_eval
+                vector_data = literal_eval(result[0])
+                print(f"Vector data: {vector_data}")
+                print(f"Vector data size: {len(vector_data)}")
+                if not hasattr(vector_data, '__len__'):
+                    raise RuntimeError(f"Could not determine vector dimension from data in table '{self.table_name}'")
+                if len(vector_data) != file_dimension:
+                    raise RuntimeError(f"Vector dimension in table '{self.table_name}' ({len(vector_data)}) does not match the file dimension {file_dimension}")
+                                
+                self.dimension = file_dimension
+                print(f"Verified table '{self.table_name}' exists and contains valid vectors with dimension {self.dimension}")
+            except psycopg2.errors.UndefinedTable:
+                raise RuntimeError(f"Table '{self.table_name}' does not exist")
     
-    def _initialize_existing_data_state(self) -> None:
-        """Initialize internal state based on existing data in the table"""
-        conn = self._get_connection()
-        with conn.cursor() as cursor:
-            # Get count of existing vectors for this tenant
-            cursor.execute(f"""
-                SELECT COUNT(*) as vector_count
-                FROM {self.table_name} 
-                WHERE tenant_id = %s
-            """, (self.tenant_id,))
-            
-            result = cursor.fetchone()
-            if result:
-                existing_count = result[0]
-                print(f"Found {existing_count} existing vectors in table '{self.table_name}'")
-                # Initialize _inserted_vectors to reflect existing data
-                self._inserted_vectors = list(range(existing_count))
-                self._id_counter = existing_count
-            else:
-                print("Warning: Could not determine existing vector count")
-    
-    def _build_with_existing_table(self) -> None:
+    def _build_with_existing_table(self, vectors: np.ndarray) -> None:
         """Build index using existing table data"""
         print(f"Reusing existing table '{self.table_name}' - skipping data loading and index creation")
-        self._verify_existing_table()
-        self._initialize_existing_data_state()
+        file_dimension = vectors.shape[1]
+        self._verify_existing_table(file_dimension)
     
+    ### This is used for the initial data load and build. It assumes the table and index don't exist.
+    ### There is a cleanup script that can be used to remove the table and index if needed.
     def _build_with_new_data(self, vectors: np.ndarray) -> None:
         """Build index by inserting new data and creating index"""
         self.dimension = vectors.shape[1]
-        self._ensure_table_exists(self.dimension)
         
         conn = self._get_connection()
         with conn.cursor() as cursor:
+            # Create the table
+            self._create_table(self.dimension, cursor)
+            
             # Insert vectors in batches
             batch_size = self.build_params.get('batch_size', 1000)
             for i in range(0, len(vectors), batch_size):
@@ -172,7 +150,7 @@ class PgVector(VectorIndex):
                     print(f"Inserted {i + len(batch)} vectors")
             
             # Create HNSW index after all vectors are inserted
-            self._create_hnsw_index()
+            self._create_hnsw_index(cursor)
     
     def build(self, vectors: np.ndarray) -> None:
         with self.lock:
@@ -181,15 +159,12 @@ class PgVector(VectorIndex):
             else:
                 self._build_with_new_data(vectors)
     
-    def _insert_with_reuse_table(self) -> None:
-        """Handle insert operation when reusing existing table"""
-        print(f"Skipping insert operation - reusing existing table '{self.table_name}'")
-    
-    def _insert_with_new_data(self, vectors: np.ndarray) -> None:
-        """Handle insert operation with new data"""
+    ### This is used by concurrent insert workers
+    ### TODO: figure out what to do in case of table re-use. For now we prevent this combo in the config
+    def insert(self, vectors: np.ndarray) -> None:        
+        # For non-reuse mode, insert vectors
         if self.dimension is None:
             self.dimension = vectors.shape[1]
-            self._ensure_table_exists(self.dimension)
         
         conn = self._get_connection()
         with conn.cursor() as cursor:
@@ -205,13 +180,6 @@ class PgVector(VectorIndex):
                     (db_id, self.tenant_id, vector_list, original_index)
                 )
                 self._inserted_vectors.append(original_index)
-    
-    def insert(self, vectors: np.ndarray) -> None:
-        with self.lock:
-            if self.reuse_table:
-                self._insert_with_reuse_table()
-            else:
-                self._insert_with_new_data(vectors)
     
     def search(self, query: np.ndarray, k: int) -> np.ndarray:
         # Initialize thread-local connection and cursor for this worker (only once per thread)

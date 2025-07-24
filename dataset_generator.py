@@ -54,9 +54,7 @@ class DatasetGenerator:
         return vectors
     
     # ------------------------------------------------------------------
-    # Simplified helper – with only clustered data we don't need a complex
-    # dispatcher.  Keep a thin wrapper so existing callers (e.g. streaming
-    # generation) keep working without changes.
+    # Extensible wrapper, in case we want to add more distributions in the future
     # ------------------------------------------------------------------
     def _generate_vectors(self, size: int) -> np.ndarray:
         """Generate vectors (clustered only)."""
