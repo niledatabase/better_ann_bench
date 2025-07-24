@@ -106,11 +106,8 @@ class ConcurrentBenchmark:
         if self.config.benchmark_mode == "search_only":
             print(f"Running in search-only mode")
             if hasattr(index, 'build') and len(workload.insert_vectors) > 0:
-                print(f"Inserting {len(workload.insert_vectors)} vectors into index...")
-                start_time = time.time()
+                print(f"Inserting and indexing {len(workload.insert_vectors)} vectors")
                 index.build(workload.insert_vectors)
-                end_time = time.time()
-                print(f"Vector insertion completed in {end_time - start_time:.2f} seconds")
             
             # No remaining vectors since we built everything
             remaining_vectors = []
@@ -120,11 +117,8 @@ class ConcurrentBenchmark:
                 # Insert initial vectors with subset of vectors
                 percentage_size = len(workload.insert_vectors) // (100 // self.config.initial_build_percentage)
                 initial_build_size = min(self.config.initial_build_size_cap, percentage_size)
-                print(f"Inserting initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})...")
-                start_time = time.time()
+                print(f"Inserting and indexing initial {initial_build_size} vectors ({self.config.initial_build_percentage}% of {len(workload.insert_vectors)}, capped at {self.config.initial_build_size_cap})...")
                 index.build(workload.insert_vectors[:initial_build_size])
-                end_time = time.time()
-                print(f"Initial vector insertion completed in {end_time - start_time:.2f} seconds")
                 remaining_vectors = workload.insert_vectors[initial_build_size:]
             else:
                 remaining_vectors = workload.insert_vectors
