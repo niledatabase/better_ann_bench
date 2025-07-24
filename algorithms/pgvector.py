@@ -19,9 +19,11 @@ class PgVector(VectorIndex):
         self._connection = None
         self._inserted_vectors = []
         self._id_counter = 0
+        # Thread-local storage for worker connections
+        self._thread_local = threading.local()
         
     def _get_connection(self):
-        """Get a database connection with proper error handling"""
+        """Get the shared database connection for build operations"""
         if self._connection is None or self._connection.closed:
             try:
                 self._connection = psycopg2.connect(**self.connection_params)
@@ -114,34 +116,47 @@ class PgVector(VectorIndex):
                     self._inserted_vectors.append(original_index)
     
     def search(self, query: np.ndarray, k: int) -> np.ndarray:
-        with self.lock:
-            if self.dimension is None:
-                raise RuntimeError("Index not built yet")
+        # Initialize thread-local connection for this worker (only once per thread)
+        if not hasattr(self._thread_local, 'connection'):
+            try:
+                self._thread_local.connection = psycopg2.connect(**self.connection_params)
+                self._thread_local.connection.autocommit = True
+            except Exception as e:
+                raise RuntimeError(f"Failed to connect to PostgreSQL: {e}")
+        
+        if self.dimension is None:
+            raise RuntimeError("Index not built yet")
+        
+        conn = self._thread_local.connection
+        with conn.cursor() as cursor:
+            query_vector = query.tolist()
+            # Convert to string format for vector casting
+            query_vector_str = str(query_vector).replace(' ', '')
             
-            conn = self._get_connection()
-            with conn.cursor() as cursor:
-                query_vector = query.tolist()
-                # Convert to string format for vector casting
-                query_vector_str = str(query_vector).replace(' ', '')
-                
-                # Use HNSW search with ef parameter for better recall
-                ef = self.search_params.get('ef', 100)
-                
-                cursor.execute(f"""
-                    SELECT original_index 
-                    FROM {self.table_name} 
-                    WHERE tenant_id = %s
-                    ORDER BY vector <-> %s::vector 
-                    LIMIT %s
-                """, (self.tenant_id, query_vector_str, k))
-                
-                results = cursor.fetchall()
-                return np.array([row[0] for row in results])
+            # Use HNSW search with ef parameter for better recall
+            ef = self.search_params.get('ef', 100)
+            
+            cursor.execute(f"""
+                SELECT original_index 
+                FROM {self.table_name} 
+                WHERE tenant_id = %s
+                ORDER BY vector <-> %s::vector 
+                LIMIT %s
+            """, (self.tenant_id, query_vector_str, k))
+            
+            results = cursor.fetchall()
+            return np.array([row[0] for row in results])
     
     def supports_concurrent_operations(self) -> bool:
         return True
     
     def __del__(self):
-        """Clean up database connection"""
+        """Clean up database connections"""
+        # Clean up shared connection
         if self._connection and not self._connection.closed:
-            self._connection.close() 
+            self._connection.close()
+        
+        # Clean up thread-local connections
+        if hasattr(self._thread_local, 'connection') and self._thread_local.connection:
+            if not self._thread_local.connection.closed:
+                self._thread_local.connection.close() 
