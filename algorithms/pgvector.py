@@ -26,8 +26,8 @@ class PgVector(VectorIndex):
         self.index_name = build_params.get('index_name', 'vectors_hnsw_idx')
         self.tenant_id = build_params.get('tenant_id', '550e8400-e29b-41d4-a716-446655440000')
         self.reuse_table = build_params.get('reuse_table', False)
+        self.batch_size = build_params.get('batch_size', 1000)
         self.dimension = None
-        self.lock = threading.RLock()
         self._connection = None
         self._id_counter = 0
         # Thread-local storage for worker connections
@@ -125,8 +125,10 @@ class PgVector(VectorIndex):
             # Create the table
             self._create_table(self.dimension, cursor)
             
-            # Insert vectors using multi-row inserts (100 rows at a time)
-            multi_row_size = 100
+            # Insert vectors using multi-row inserts
+            # Right now we simple use the batch_size from the config
+            # But we may want something more sophisticated in the future
+            multi_row_size = self.batch_size
             
             for chunk_start in range(0, len(vectors), multi_row_size):
                 chunk = vectors[chunk_start:chunk_start + multi_row_size]
