@@ -154,11 +154,10 @@ class PgVector(VectorIndex):
             self._create_hnsw_index(cursor)
     
     def build(self, vectors: np.ndarray) -> None:
-        with self.lock:
-            if self.reuse_table:
-                self._build_with_existing_table(vectors)
-            else:
-                self._build_with_new_data(vectors)
+        if self.reuse_table:
+            self._build_with_existing_table(vectors)
+        else:
+            self._build_with_new_data(vectors)
     
     ### This is used by concurrent insert workers
     ### TODO: figure out what to do in case of table re-use. For now we prevent this combo in the config
