@@ -156,7 +156,7 @@ class PgVector(VectorIndex):
     def build(self, vectors: np.ndarray) -> None:
         with self.lock:
             if self.reuse_table:
-                self._build_with_existing_table()
+                self._build_with_existing_table(vectors)
             else:
                 self._build_with_new_data(vectors)
     
