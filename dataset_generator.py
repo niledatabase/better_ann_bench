@@ -13,19 +13,18 @@ class DatasetConfig:
     size: int
     dimension: int
     query_size: int
-    seed: int = 42
-    
-    # Distribution-specific parameters
-    clusters: int = 10  # For clustered data
-    cluster_std: float = 0.1  # Standard deviation within clusters
-    
-    # Ground truth parameters
-    k_neighbors: int = 100  # Number of true neighbors to compute
-    skip_ground_truth: bool = False  # Skip ground truth computation for large datasets
-    
+    # Ground truth computation block sizes (for memory management) - REQUIRED
+    gt_train_block_size: int  # Training vectors per block for ground truth computation
+    gt_query_block_size: int  # Query vectors per block for ground truth computation
     # Memory management
     chunk_size: int = 10000  # Generate training vectors in chunks to manage memory
     query_chunk_size: int = 1000  # Generate query vectors in chunks to manage memory
+    # Dataset generation parameters
+    seed: int = 42
+    clusters: int = 10  # For clustered data
+    cluster_std: float = 0.1  # Standard deviation within clusters
+    k_neighbors: int = 100  # Number of true neighbors to compute
+    skip_ground_truth: bool = False  # Skip ground truth computation for large datasets
     
     def __post_init__(self):
         if self.query_size > self.size:
@@ -140,8 +139,8 @@ class DatasetGenerator:
                 k=self.config.k_neighbors,
                 train_dtype=np.float32,
                 q_dtype=np.float32,
-                train_block_rows=500_000,
-                q_block_rows=1_000
+                train_block_rows=self.config.gt_train_block_size,
+                q_block_rows=self.config.gt_query_block_size
             )
             
             return ground_truth
@@ -224,7 +223,7 @@ class DatasetGenerator:
             # Precompute training vector norms
             print("Precomputing training vector norms...")
             train_norm2 = np.empty(n, dtype=np.float64)
-            train_block_rows = 500_000
+            train_block_rows = self.config.gt_train_block_size
             
             for t0 in range(0, n, train_block_rows):
                 t1 = min(t0 + train_block_rows, n)
@@ -233,8 +232,8 @@ class DatasetGenerator:
                 print(f"  Processed training block {t0//train_block_rows + 1}/{(n + train_block_rows - 1)//train_block_rows}")
             
             # Process all queries against training blocks
-            print("Computing ground truth for 1000 queries...")
-            q_block_rows = 1_000  # Process all queries at once since they're small
+            print(f"Computing ground truth for {nq} queries...")
+            q_block_rows = self.config.gt_query_block_size
             
             for q0 in range(0, nq, q_block_rows):
                 q1 = min(q0 + q_block_rows, nq)

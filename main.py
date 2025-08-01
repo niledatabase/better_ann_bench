@@ -65,7 +65,9 @@ def generate_synthetic_dataset(config: BenchmarkConfig) -> WorkloadSpec:
         k_neighbors=gen_config.k_neighbors,
         skip_ground_truth=skip_ground_truth,
         chunk_size=gen_config.chunk_size,
-        query_chunk_size=gen_config.query_chunk_size
+        query_chunk_size=gen_config.query_chunk_size,
+        gt_train_block_size=gen_config.gt_train_block_size,
+        gt_query_block_size=gen_config.gt_query_block_size
     )
     
     generator = DatasetGenerator(dataset_config)

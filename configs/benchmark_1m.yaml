@@ -5,6 +5,10 @@ dataset_path: null  # Use synthetic data
 
 dataset_generation:
   enabled: true
+  # Ground truth computation block sizes (for memory management) - REQUIRED
+  gt_train_block_size: 50000  # 50K vectors for 1M dataset
+  gt_query_block_size: 1000  # 1000 queries for efficient processing
+  # Dataset generation parameters
   dimension: 128
   clusters: 100
   cluster_std: 0.15
