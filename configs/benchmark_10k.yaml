@@ -1,21 +1,25 @@
-# Small 10K vector benchmark for testing
+# 10K vector benchmark configuration
 dataset_size: 10000
 query_count: 1000
 dataset_path: null  # Use synthetic data
 
 dataset_generation:
   enabled: true
+  distribution: "clustered"
   dimension: 128
-  clusters: 50
+  clusters: 10
   cluster_std: 0.1
   k_neighbors: 100
   seed: 42
+  # Memory management - smaller chunks fine for small datasets
+  chunk_size: 1000  # Smaller chunks for 10k dataset
+  query_chunk_size: 100  # Smaller chunks for queries
 
 concurrent_inserters: 2
 concurrent_searchers: 4
 search_batch_size: 10
 insert_batch_size: 100
-max_runtime_seconds: 60
+max_runtime_seconds: 60  # 1 minute
 benchmark_mode: "search_only"  # "search_only" or "hybrid"
 
 # Hybrid mode settings (used when benchmark_mode is "hybrid")

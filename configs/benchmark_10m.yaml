@@ -11,6 +11,9 @@ dataset_generation:
   cluster_std: 0.12
   k_neighbors: 100
   seed: 42
+  # Memory management - configure chunk sizes for large datasets
+  chunk_size: 50000  # Larger chunks for 10M dataset (default: 10000)
+  query_chunk_size: 5000  # Larger chunks for queries (default: 1000)
 
 concurrent_inserters: 8
 concurrent_searchers: 16

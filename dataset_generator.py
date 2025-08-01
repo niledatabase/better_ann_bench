@@ -24,7 +24,8 @@ class DatasetConfig:
     skip_ground_truth: bool = False  # Skip ground truth computation for large datasets
     
     # Memory management
-    chunk_size: int = 10000  # Generate in chunks to manage memory
+    chunk_size: int = 10000  # Generate training vectors in chunks to manage memory
+    query_chunk_size: int = 1000  # Generate query vectors in chunks to manage memory
     
     def __post_init__(self):
         if self.query_size > self.size:
@@ -95,7 +96,7 @@ class DatasetGenerator:
         nn.fit(train_vectors)
         
         # Compute in chunks to manage memory
-        chunk_size = min(1000, len(query_vectors))
+        chunk_size = min(self.config.query_chunk_size, len(query_vectors))
         all_neighbors = []
         
         for i in range(0, len(query_vectors), chunk_size):
@@ -340,7 +341,7 @@ class DatasetGenerator:
                 'train', 
                 shape=(self.config.size, self.config.dimension), 
                 dtype=np.float32,
-                chunks=(min(10000, self.config.size // 200), self.config.dimension),
+                chunks=(self.config.chunk_size, self.config.dimension),
                 compression='gzip'
             )
             
@@ -348,32 +349,30 @@ class DatasetGenerator:
                 'test', 
                 shape=(self.config.query_size, self.config.dimension), 
                 dtype=np.float32,
-                chunks=(min(1000, self.config.query_size), self.config.dimension),
+                chunks=(self.config.query_chunk_size, self.config.dimension),
                 compression='gzip'
             )
             
             # Generate training vectors in chunks with proper clustering
             print("Generating training vectors in chunks...")
-            chunk_size = min(10000, self.config.size // 200)  # Smaller chunks for memory efficiency
             
             # Pre-generate cluster centers to ensure consistent distribution across chunks
             np.random.seed(self.config.seed)
             cluster_centers = np.random.randn(self.config.clusters, self.config.dimension).astype(np.float32)
             
-            for i in range(0, self.config.size, chunk_size):
-                end_idx = min(i + chunk_size, self.config.size)
+            for i in range(0, self.config.size, self.config.chunk_size):
+                end_idx = min(i + self.config.chunk_size, self.config.size)
                 chunk_vectors = self._generate_clustered_chunk(end_idx - i, cluster_centers)
                 train_dataset[i:end_idx] = chunk_vectors
-                print(f"  Generated training chunk {i//chunk_size + 1}/{(self.config.size + chunk_size - 1)//chunk_size}")
+                print(f"  Generated training chunk {i//self.config.chunk_size + 1}/{(self.config.size + self.config.chunk_size - 1)//self.config.chunk_size}")
             
             # Generate query vectors in chunks with same clustering
             print("Generating query vectors in chunks...")
-            query_chunk_size = min(1000, self.config.query_size // 10)
-            for i in range(0, self.config.query_size, query_chunk_size):
-                end_idx = min(i + query_chunk_size, self.config.query_size)
+            for i in range(0, self.config.query_size, self.config.query_chunk_size):
+                end_idx = min(i + self.config.query_chunk_size, self.config.query_size)
                 chunk_vectors = self._generate_clustered_chunk(end_idx - i, cluster_centers)
                 test_dataset[i:end_idx] = chunk_vectors
-                print(f"  Generated query chunk {i//query_chunk_size + 1}/{(self.config.query_size + query_chunk_size - 1)//query_chunk_size}")
+                print(f"  Generated query chunk {i//self.config.query_chunk_size + 1}/{(self.config.query_size + self.config.query_chunk_size - 1)//self.config.query_chunk_size}")
             
             # Store metadata
             f.attrs['size'] = self.config.size

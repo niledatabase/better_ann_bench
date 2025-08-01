@@ -19,6 +19,9 @@ class DatasetGenerationConfig:
     noise_level: float = 0.1
     k_neighbors: int = 100
     seed: int = 42
+    # Memory management - chunk sizes for dataset generation
+    chunk_size: int = 10000  # Training vectors chunk size
+    query_chunk_size: int = 1000  # Query vectors chunk size
 
 
 @dataclass

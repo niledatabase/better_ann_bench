@@ -5,15 +5,18 @@ dataset_path: null  # Use synthetic data
 
 dataset_generation:
   enabled: true
-  distribution: "mixed"  # Mix of clustered and uniform data
+  distribution: "clustered"
   dimension: 128
   clusters: 10000
   cluster_std: 0.1
   k_neighbors: 100
   seed: 42
+  # Memory management - use large chunks for 100M dataset
+  chunk_size: 100000  # 10x larger than default for 100M dataset
+  query_chunk_size: 10000  # 10x larger than default for queries
 
 concurrent_inserters: 16
 concurrent_searchers: 32
 search_batch_size: 100
 insert_batch_size: 10000
-max_runtime_seconds: 1800  # 30 minutes
+max_runtime_seconds: 3600  # 1 hour
