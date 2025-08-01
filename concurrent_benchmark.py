@@ -19,7 +19,7 @@ class VectorIndex(Protocol):
         pass
     
     @abstractmethod
-    def build_streaming(self, vectors_path: str, chunk_size: int = 10000) -> None:
+    def build_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
         """Build index by streaming vectors from file in chunks"""
         pass
     
@@ -250,7 +250,7 @@ class ConcurrentBenchmark:
             if workload.insert_vectors_path is not None:
                 # Use streaming build for large datasets that don't fit in memory
                 print(f"Using streaming build for large dataset...")
-                index.build_streaming(workload.insert_vectors_path, chunk_size=50000)
+                index.build_streaming(workload.insert_vectors_path)  # Use instance batch_size
                 remaining_vectors = None  # No remaining vectors in search-only mode
             else:
                 index.build(workload.insert_vectors)

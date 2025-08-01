@@ -159,10 +159,29 @@ class PgVector(VectorIndex):
         else:
             self._build_with_new_data(vectors)
     
-    def build_streaming(self, vectors_path: str, chunk_size: int = 10000) -> None:
+    def build_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
         """Build index by streaming vectors from file in chunks"""
         if self.reuse_table:
-            raise RuntimeError("Streaming build not supported in reuse mode")
+            # Reuse existing table - just verify it exists and has correct structure
+            import h5py
+            with h5py.File(vectors_path, 'r') as f:
+                train_dataset = f['train']
+                file_dimension = train_dataset.shape[1]
+            self._build_with_existing_table_streaming(file_dimension)
+        else:
+            # Build new table with streaming data
+            self._build_with_new_data_streaming(vectors_path, chunk_size)
+    
+    def _build_with_existing_table_streaming(self, file_dimension: int) -> None:
+        """Build index using existing table data (streaming version)"""
+        print(f"Reusing existing table '{self.table_name}' - skipping data loading and index creation")
+        self._verify_existing_table(file_dimension)
+    
+    def _build_with_new_data_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
+        """Build index by streaming vectors from file in chunks"""
+        # Use instance batch_size if chunk_size not specified
+        if chunk_size is None:
+            chunk_size = self.batch_size
         
         import h5py
         
