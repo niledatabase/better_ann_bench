@@ -51,6 +51,9 @@ def generate_synthetic_dataset(config: BenchmarkConfig) -> WorkloadSpec:
         from benchmark_config import DatasetGenerationConfig
         gen_config = DatasetGenerationConfig(**gen_config)
     
+    # Skip ground truth for very large datasets to avoid memory issues
+    skip_ground_truth = config.dataset_size > 10000000  # 10M vectors threshold
+    
     dataset_config = DatasetConfig(
         name="synthetic_clustered",
         size=config.dataset_size,
@@ -59,7 +62,8 @@ def generate_synthetic_dataset(config: BenchmarkConfig) -> WorkloadSpec:
         seed=gen_config.seed,
         clusters=gen_config.clusters,
         cluster_std=gen_config.cluster_std,
-        k_neighbors=gen_config.k_neighbors
+        k_neighbors=gen_config.k_neighbors,
+        skip_ground_truth=skip_ground_truth
     )
     
     generator = DatasetGenerator(dataset_config)
@@ -68,12 +72,24 @@ def generate_synthetic_dataset(config: BenchmarkConfig) -> WorkloadSpec:
     save_path = config.save_dataset_path if hasattr(config, 'save_dataset_path') else None
     train_vectors, query_vectors, ground_truth = generator.generate_dataset(save_path)
     
-    return WorkloadSpec(
-        insert_vectors=train_vectors,
-        search_queries=query_vectors,
-        ground_truth=ground_truth,
-        k=10
-    )
+    # Handle file paths for large datasets
+    if isinstance(train_vectors, str):
+        # Large dataset - use memory-mapped files
+        print(f"Using memory-mapped dataset from {train_vectors}")
+        return WorkloadSpec(
+            insert_vectors_path=train_vectors,
+            search_queries_path=query_vectors,
+            ground_truth=ground_truth,
+            k=10
+        )
+    else:
+        # Small dataset - use numpy arrays
+        return WorkloadSpec(
+            insert_vectors=train_vectors,
+            search_queries=query_vectors,
+            ground_truth=ground_truth,
+            k=10
+        )
 
 
 def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
@@ -88,6 +104,7 @@ def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
             # Try to load neighbors, but don't fail if they don't exist
             try:
                 neighbors = f['neighbors'][:]
+                print("Loaded ground truth from dataset")
             except KeyError:
                 print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
                 neighbors = None
@@ -99,6 +116,7 @@ def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
         # Try to load neighbors, but don't fail if they don't exist
         try:
             neighbors = data['neighbors']
+            print("Loaded ground truth from dataset")
         except KeyError:
             print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
             neighbors = None
