@@ -159,6 +159,55 @@ class PgVector(VectorIndex):
         else:
             self._build_with_new_data(vectors)
     
+    def build_streaming(self, vectors_path: str, chunk_size: int = 10000) -> None:
+        """Build index by streaming vectors from file in chunks"""
+        if self.reuse_table:
+            raise RuntimeError("Streaming build not supported in reuse mode")
+        
+        import h5py
+        
+        # Get dataset info without loading all data
+        with h5py.File(vectors_path, 'r') as f:
+            train_dataset = f['train']
+            total_vectors = train_dataset.shape[0]
+            dimension = train_dataset.shape[1]
+        
+        print(f"Streaming build: {total_vectors:,} vectors, {dimension} dimensions, chunk_size={chunk_size:,}")
+        
+        # Create table
+        conn = self._get_connection()
+        with conn.cursor() as cursor:
+            self._create_table(dimension, cursor)
+            self.dimension = dimension
+            
+            # Stream vectors in chunks
+            for chunk_start in range(0, total_vectors, chunk_size):
+                chunk_end = min(chunk_start + chunk_size, total_vectors)
+                
+                # Load chunk from file
+                with h5py.File(vectors_path, 'r') as f:
+                    chunk = f['train'][chunk_start:chunk_end]
+                
+                # Insert chunk
+                values_list = []
+                for j, vector in enumerate(chunk):
+                    vector_list = vector.tolist()
+                    vector_index = chunk_start + j
+                    values_list.append((vector_index, self.tenant_id, vector_list))
+                
+                # Execute multi-row insert
+                args_str = ','.join(cursor.mogrify(
+                    f"(%s, %s, %s::vector)", 
+                    (id_val, tenant_val, vector_val)
+                ).decode('utf-8') for id_val, tenant_val, vector_val in values_list)
+                
+                cursor.execute(f"INSERT INTO {self.table_name} (id, tenant_id, vector) VALUES {args_str}")
+                
+                print(f"Inserted vectors {chunk_start:,} to {chunk_end:,} ({chunk_end - chunk_start:,} vectors)")
+            
+            # Create HNSW index after all vectors are inserted
+            self._create_hnsw_index(cursor)
+    
     ### This is used by concurrent insert workers
     ### TODO: figure out what to do in case of table re-use. For now we prevent this combo in the config
     def insert(self, vectors: np.ndarray) -> None:        

@@ -103,15 +103,48 @@ def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
     try:
         import h5py
         with h5py.File(dataset_path, 'r') as f:
-            train_data = f['train'][:]
-            test_data = f['test'][:]
-            # Try to load neighbors, but don't fail if they don't exist
-            try:
-                neighbors = f['neighbors'][:]
-                print("Loaded ground truth from dataset")
-            except KeyError:
-                print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
-                neighbors = None
+            train_size = f['train'].shape[0]
+            test_size = f['test'].shape[0]
+            
+            # For large datasets (>1M vectors), use memory-mapped approach
+            if train_size > 1000000:
+                print(f"Large dataset detected ({train_size:,} vectors) - using memory-mapped approach")
+                # Try to load neighbors, but don't fail if they don't exist
+                try:
+                    neighbors = f['neighbors'][:]
+                    print("Loaded ground truth from dataset")
+                except KeyError:
+                    print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
+                    neighbors = None
+                
+                return WorkloadSpec(
+                    insert_vectors_path=dataset_path,
+                    search_queries_path=dataset_path,
+                    ground_truth=neighbors,
+                    k=10
+                )
+            else:
+                # For small datasets, load into memory
+                print(f"Small dataset detected ({train_size:,} vectors) - loading into memory")
+                train_data = f['train'][:]
+                test_data = f['test'][:]
+                
+                # Try to load neighbors, but don't fail if they don't exist
+                try:
+                    neighbors = f['neighbors'][:]
+                    print("Loaded ground truth from dataset")
+                except KeyError:
+                    print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
+                    neighbors = None
+                
+                print(f"Loaded dataset: {len(train_data)} training vectors, {len(test_data)} test queries")
+                
+                return WorkloadSpec(
+                    insert_vectors=train_data,
+                    search_queries=test_data,
+                    ground_truth=neighbors,
+                    k=10
+                )
     except ImportError:
         print("h5py not available, trying numpy format")
         data = np.load(dataset_path, allow_pickle=True)
@@ -124,15 +157,15 @@ def load_existing_dataset(dataset_path: str) -> WorkloadSpec:
         except KeyError:
             print("Warning: No ground truth (neighbors) found in dataset - recall calculation will be skipped")
             neighbors = None
-    
-    print(f"Loaded dataset: {len(train_data)} training vectors, {len(test_data)} test queries")
-    
-    return WorkloadSpec(
-        insert_vectors=train_data,
-        search_queries=test_data,
-        ground_truth=neighbors,
-        k=10
-    )
+        
+        print(f"Loaded dataset: {len(train_data)} training vectors, {len(test_data)} test queries")
+        
+        return WorkloadSpec(
+            insert_vectors=train_data,
+            search_queries=test_data,
+            ground_truth=neighbors,
+            k=10
+        )
 
 
 def save_results(results: BenchmarkResults, output_path: str, algorithm_name: str):

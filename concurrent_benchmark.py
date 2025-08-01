@@ -15,6 +15,12 @@ from metrics import MetricsCollector, BenchmarkResults
 class VectorIndex(Protocol):
     @abstractmethod
     def build(self, vectors: np.ndarray) -> None:
+        """Build index with all vectors loaded in memory"""
+        pass
+    
+    @abstractmethod
+    def build_streaming(self, vectors_path: str, chunk_size: int = 10000) -> None:
+        """Build index by streaming vectors from file in chunks"""
         pass
     
     @abstractmethod
@@ -242,9 +248,9 @@ class ConcurrentBenchmark:
             print(f"Running in search-only mode")
             ## Reuse logic belongs to the algorithm, so its contained in the build method
             if workload.insert_vectors_path is not None:
-                # Load vectors from memory-mapped file
-                with MemoryMappedVectors(workload.insert_vectors_path, 'train') as vectors:
-                    index.build(vectors.get_all())
+                # Use streaming build for large datasets that don't fit in memory
+                print(f"Using streaming build for large dataset...")
+                index.build_streaming(workload.insert_vectors_path, chunk_size=50000)
                 remaining_vectors = None  # No remaining vectors in search-only mode
             else:
                 index.build(workload.insert_vectors)

@@ -80,8 +80,8 @@ class DatasetGenerator:
 
 
     def _compute_ground_truth(self, train_vectors: np.ndarray, query_vectors: np.ndarray) -> np.ndarray:
-        """Compute ground truth nearest neighbors using brute force"""
-        print(f"Computing ground truth for {len(query_vectors)} queries...")
+        """Compute ground truth nearest neighbors using brute force for small datasets"""
+        print(f"Computing ground truth for {len(query_vectors)} queries and {len(train_vectors)} training vectors using brute force.")
         
         from sklearn.neighbors import NearestNeighbors
         
@@ -94,21 +94,10 @@ class DatasetGenerator:
         )
         nn.fit(train_vectors)
         
-        # Compute in chunks to manage memory
-        chunk_size = min(self.config.query_chunk_size, len(query_vectors))
-        all_neighbors = []
+        # For small datasets, process all queries at once
+        _, neighbors = nn.kneighbors(query_vectors)
         
-        for i in range(0, len(query_vectors), chunk_size):
-            end_idx = min(i + chunk_size, len(query_vectors))
-            chunk_queries = query_vectors[i:end_idx]
-            
-            _, neighbors = nn.kneighbors(chunk_queries)
-            all_neighbors.append(neighbors)
-            
-            if (i // chunk_size) % 10 == 0:
-                print(f"  Processed {end_idx}/{len(query_vectors)} queries")
-        
-        return np.vstack(all_neighbors)
+        return neighbors
     
     def _compute_ground_truth_blockwise(self, train_vectors: np.ndarray, query_vectors: np.ndarray) -> np.ndarray:
         """Blockwise ground truth computation using memory-mapped files and optimized distance calculations"""
@@ -207,7 +196,6 @@ class DatasetGenerator:
     
     def _compute_ground_truth_blockwise_hdf5(self, hdf5_path: str) -> np.ndarray:
         """Memory-efficient ground truth computation using HDF5 files"""
-        print("Computing ground truth for 1000 queries using blockwise approach...")
         
         with h5py.File(hdf5_path, 'r') as f:
             train_dataset = f['train']
@@ -217,8 +205,10 @@ class DatasetGenerator:
             nq = query_dataset.shape[0]
             dim = train_dataset.shape[1]
             k = self.config.k_neighbors
-            
-            gt_idx = np.empty((nq, k), dtype=np.int32)
+        
+        print(f"Computing ground truth for {nq:,} queries using blockwise approach...")
+        
+        gt_idx = np.empty((nq, k), dtype=np.int32)
             
             # Precompute training vector norms
             print("Precomputing training vector norms...")

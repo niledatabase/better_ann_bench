@@ -17,8 +17,8 @@ dataset_generation:
   gt_train_block_size: 25000  # 25K vectors = 25MB training + 200MB distance matrix
   gt_query_block_size: 100  # 100 queries = 100KB + manageable distance matrix
 
-concurrent_inserters: 8
-concurrent_searchers: 16
+concurrent_inserters: 0
+concurrent_searchers: 20
 search_batch_size: 75
 insert_batch_size: 5000
 max_runtime_seconds: 900  # 15 minutes
