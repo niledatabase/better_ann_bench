@@ -99,100 +99,7 @@ class DatasetGenerator:
         
         return neighbors
     
-    def _compute_ground_truth_blockwise(self, train_vectors: np.ndarray, query_vectors: np.ndarray) -> np.ndarray:
-        """Blockwise ground truth computation using memory-mapped files and optimized distance calculations"""
-        print(f"Computing ground truth for {len(query_vectors)} queries using blockwise approach...")
-        
-        import tempfile
-        import os
-        
-        # Create temporary files for memory-mapped access
-        with tempfile.NamedTemporaryFile(suffix='.npy', delete=False) as train_file, \
-             tempfile.NamedTemporaryFile(suffix='.npy', delete=False) as query_file:
-            
-            train_path = train_file.name
-            query_path = query_file.name
-            
-            # Save vectors to temporary files
-            np.save(train_path, train_vectors)
-            np.save(query_path, query_vectors)
-        
-        try:
-            # Compute ground truth using blockwise approach
-            ground_truth = self._compute_ground_truth_blockwise_internal(
-                train_path=train_path,
-                queries_path=query_path,
-                n=len(train_vectors),
-                nq=len(query_vectors),
-                dim=train_vectors.shape[1],
-                k=self.config.k_neighbors,
-                train_dtype=np.float32,
-                q_dtype=np.float32,
-                train_block_rows=self.config.gt_train_block_size,
-                q_block_rows=self.config.gt_query_block_size
-            )
-            
-            return ground_truth
-            
-        finally:
-            # Clean up temporary files
-            os.unlink(train_path)
-            os.unlink(query_path)
-    
-    def _compute_ground_truth_blockwise_internal(self, train_path, queries_path, n, nq, dim, k=10,
-                                       train_dtype=np.float32, q_dtype=np.float32,
-                                       train_block_rows=500_000, q_block_rows=1_000):
-        """Blockwise ground truth computation using memory-mapped files and optimized distance calculations"""
-        train = np.memmap(train_path, dtype=train_dtype, mode="r", shape=(n, dim))
-        queries = np.memmap(queries_path, dtype=q_dtype, mode="r", shape=(nq, dim))
-        gt_idx = np.empty((nq, k), dtype=np.int32)
 
-        print(f"Precomputing training vector norms...")
-        # precompute norms to speed up L2 dists: ||a-b||^2 = ||a||^2 + ||b||^2 - 2 a·b
-        train_norm2 = np.empty(n, dtype=np.float64)
-        for t0 in range(0, n, train_block_rows):
-            t1 = min(t0 + train_block_rows, n)
-            block = train[t0:t1].astype(np.float32, copy=False)
-            train_norm2[t0:t1] = np.einsum('ij,ij->i', block, block)
-            if (t0 // train_block_rows) % 10 == 0:
-                print(f"  Processed training block {t0//train_block_rows + 1}/{(n + train_block_rows - 1)//train_block_rows}")
-
-        print(f"Computing ground truth for {nq} queries...")
-        for q0 in range(0, nq, q_block_rows):
-            q1 = min(q0 + q_block_rows, nq)
-            q = queries[q0:q1].astype(np.float64, copy=False)
-            q_norm2 = np.einsum('ij,ij->i', q, q)[:, None]  # (q_block, 1)
-
-            # running top-k (distances large → worse)
-            bestD = np.full((q1 - q0, k), np.inf, dtype=np.float64)
-            bestI = np.full((q1 - q0, k), -1, dtype=np.int32)
-
-            for t0 in range(0, n, train_block_rows):
-                t1 = min(t0 + train_block_rows, n)
-                block = train[t0:t1].astype(np.float64, copy=False)  # (tb, dim)
-
-                # compute distances for this block: (q_block, tb)
-                dot = q @ block.T
-                D = q_norm2 + train_norm2[t0:t1][None, :] - 2.0 * dot
-
-                # candidates from this block
-                idx_local = np.argpartition(D, kth=k-1, axis=1)[:, :k]
-                vals_local = np.take_along_axis(D, idx_local, axis=1)
-                idx_local += t0
-
-                # merge with current best
-                D_merge = np.concatenate([bestD, vals_local], axis=1)
-                I_merge = np.concatenate([bestI, idx_local], axis=1)
-                sel = np.argpartition(D_merge, kth=k-1, axis=1)[:, :k]
-                bestD = np.take_along_axis(D_merge, sel, axis=1)
-                bestI = np.take_along_axis(I_merge, sel, axis=1)
-
-            gt_idx[q0:q1] = bestI
-            
-            if (q0 // q_block_rows) % 5 == 0:
-                print(f"  Completed query block {q0//q_block_rows + 1}/{(nq + q_block_rows - 1)//q_block_rows}")
-
-        return gt_idx
     
     def _compute_ground_truth_blockwise_hdf5(self, hdf5_path: str) -> np.ndarray:
         """Memory-efficient ground truth computation using HDF5 files"""
@@ -210,50 +117,50 @@ class DatasetGenerator:
         
         gt_idx = np.empty((nq, k), dtype=np.int32)
             
-            # Precompute training vector norms
-            print("Precomputing training vector norms...")
-            train_norm2 = np.empty(n, dtype=np.float64)
-            train_block_rows = self.config.gt_train_block_size
+        # Precompute training vector norms
+        print("Precomputing training vector norms...")
+        train_norm2 = np.empty(n, dtype=np.float64)
+        train_block_rows = self.config.gt_train_block_size
+            
+        for t0 in range(0, n, train_block_rows):
+            t1 = min(t0 + train_block_rows, n)
+            block = train_dataset[t0:t1].astype(np.float64, copy=False)
+            train_norm2[t0:t1] = np.einsum('ij,ij->i', block, block)
+            print(f"  Processed training block {t0//train_block_rows + 1}/{(n + train_block_rows - 1)//train_block_rows}")
+        
+        # Process all queries against training blocks
+        print(f"Computing ground truth for {nq} queries...")
+        q_block_rows = self.config.gt_query_block_size
+            
+        for q0 in range(0, nq, q_block_rows):
+            q1 = min(q0 + q_block_rows, nq)
+            q = query_dataset[q0:q1].astype(np.float64, copy=False)
+            q_norm2 = np.einsum('ij,ij->i', q, q)[:, None]
+            
+            bestD = np.full((q1 - q0, k), np.inf, dtype=np.float64)
+            bestI = np.full((q1 - q0, k), -1, dtype=np.int32)
             
             for t0 in range(0, n, train_block_rows):
                 t1 = min(t0 + train_block_rows, n)
                 block = train_dataset[t0:t1].astype(np.float64, copy=False)
-                train_norm2[t0:t1] = np.einsum('ij,ij->i', block, block)
-                print(f"  Processed training block {t0//train_block_rows + 1}/{(n + train_block_rows - 1)//train_block_rows}")
-            
-            # Process all queries against training blocks
-            print(f"Computing ground truth for {nq} queries...")
-            q_block_rows = self.config.gt_query_block_size
-            
-            for q0 in range(0, nq, q_block_rows):
-                q1 = min(q0 + q_block_rows, nq)
-                q = query_dataset[q0:q1].astype(np.float64, copy=False)
-                q_norm2 = np.einsum('ij,ij->i', q, q)[:, None]
+                dot = q @ block.T
+                D = q_norm2 + train_norm2[t0:t1][None, :] - 2.0 * dot
                 
-                bestD = np.full((q1 - q0, k), np.inf, dtype=np.float64)
-                bestI = np.full((q1 - q0, k), -1, dtype=np.int32)
+                # Efficient top-K merging using argpartition
+                idx_local = np.argpartition(D, kth=k-1, axis=1)[:, :k]
+                vals_local = np.take_along_axis(D, idx_local, axis=1)
+                idx_local += t0
                 
-                for t0 in range(0, n, train_block_rows):
-                    t1 = min(t0 + train_block_rows, n)
-                    block = train_dataset[t0:t1].astype(np.float64, copy=False)
-                    dot = q @ block.T
-                    D = q_norm2 + train_norm2[t0:t1][None, :] - 2.0 * dot
-                    
-                    # Efficient top-K merging using argpartition
-                    idx_local = np.argpartition(D, kth=k-1, axis=1)[:, :k]
-                    vals_local = np.take_along_axis(D, idx_local, axis=1)
-                    idx_local += t0
-                    
-                    D_merge = np.concatenate([bestD, vals_local], axis=1)
-                    I_merge = np.concatenate([bestI, idx_local], axis=1)
-                    sel = np.argpartition(D_merge, kth=k-1, axis=1)[:, :k]
-                    bestD = np.take_along_axis(D_merge, sel, axis=1)
-                    bestI = np.take_along_axis(I_merge, sel, axis=1)
+                D_merge = np.concatenate([bestD, vals_local], axis=1)
+                I_merge = np.concatenate([bestI, idx_local], axis=1)
+                sel = np.argpartition(D_merge, kth=k-1, axis=1)[:, :k]
+                bestD = np.take_along_axis(D_merge, sel, axis=1)
+                bestI = np.take_along_axis(I_merge, sel, axis=1)
                 
-                gt_idx[q0:q1] = bestI
-                print(f"  Completed query block {q0//q_block_rows + 1}/{(nq + q_block_rows - 1)//q_block_rows}")
+            gt_idx[q0:q1] = bestI
+            print(f"  Completed query block {q0//q_block_rows + 1}/{(nq + q_block_rows - 1)//q_block_rows}")
             
-            return gt_idx
+        return gt_idx
     
     def generate_dataset(self, save_path: Optional[str] = None) -> Tuple[Union[np.ndarray, str], Union[np.ndarray, str], Optional[np.ndarray]]:
         """Generate complete dataset with train vectors, queries, and ground truth"""
@@ -372,53 +279,28 @@ class DatasetGenerator:
             f.attrs['seed'] = self.config.seed
             f.attrs['has_ground_truth'] = False  # Will be updated after ground truth computation
         
-        # For large datasets, return file paths to maintain memory efficiency
-        if self.config.size > 1000000:  # 1M threshold
-            print("Large dataset detected - returning file paths for memory efficiency")
-            
-            # Compute ground truth using memory-efficient method
-            if self.config.skip_ground_truth:
-                print("Skipping ground truth computation as requested...")
-                ground_truth = None
-            else:
-                print("Computing ground truth using blockwise approach...")
-                # Use memory-efficient blockwise computation with HDF5 files
-                ground_truth = self._compute_ground_truth_blockwise_hdf5(save_path)
-                
-                # Save ground truth to the file
-                with h5py.File(save_path, 'a') as f:
-                    f.create_dataset('neighbors', data=ground_truth, compression='gzip')
-                    f.attrs['has_ground_truth'] = True
-            
-            generation_time = time.time() - start_time
-            print(f"Dataset generation completed in {generation_time:.2f} seconds")
-            
-            # Return file paths instead of loading into memory
-            return save_path, save_path, ground_truth
+        # Since this method is only called for large datasets, always return file paths
+        print("Large dataset detected - returning file paths for memory efficiency")
+        
+        # Compute ground truth using memory-efficient method
+        if self.config.skip_ground_truth:
+            print("Skipping ground truth computation as requested...")
+            ground_truth = None
         else:
-            # For smaller datasets, load into memory as before
-            print("Loading generated dataset...")
-            with h5py.File(save_path, 'r') as f:
-                train_vectors = f['train'][:]
-                query_vectors = f['test'][:]
+            print("Computing ground truth using blockwise approach...")
+            # Use memory-efficient blockwise computation with HDF5 files
+            ground_truth = self._compute_ground_truth_blockwise_hdf5(save_path)
             
-            # Compute ground truth using memory-efficient method
-            if self.config.skip_ground_truth:
-                print("Skipping ground truth computation as requested...")
-                ground_truth = None
-            else:
-                print("Computing ground truth using blockwise approach...")
-                ground_truth = self._compute_ground_truth_blockwise(train_vectors, query_vectors)
-                
-                # Save ground truth to the file
-                with h5py.File(save_path, 'a') as f:
-                    f.create_dataset('neighbors', data=ground_truth, compression='gzip')
-                    f.attrs['has_ground_truth'] = True
-            
-            generation_time = time.time() - start_time
-            print(f"Dataset generation completed in {generation_time:.2f} seconds")
-            
-            return train_vectors, query_vectors, ground_truth
+            # Save ground truth to the file
+            with h5py.File(save_path, 'a') as f:
+                f.create_dataset('neighbors', data=ground_truth, compression='gzip')
+                f.attrs['has_ground_truth'] = True
+        
+        generation_time = time.time() - start_time
+        print(f"Dataset generation completed in {generation_time:.2f} seconds")
+        
+        # Return file paths instead of loading into memory
+        return save_path, save_path, ground_truth
     
     def _save_dataset(self, save_path: str, train_vectors: np.ndarray, 
                      query_vectors: np.ndarray, ground_truth: Optional[np.ndarray]):
