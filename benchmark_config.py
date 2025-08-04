@@ -46,6 +46,7 @@ class BenchmarkConfig:
     
     # Runtime settings
     max_runtime_seconds: int = 300
+    show_progress: Optional[int] = None  # Progress reporting interval in seconds
     
     # Benchmark mode
     benchmark_mode: str = "search_only"  # "search_only" or "hybrid"

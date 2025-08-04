@@ -49,6 +49,11 @@ class MetricsCollector:
         self._concurrent_searchers: int = 0
         self._concurrent_inserters: int = 0
         self._benchmark_mode: str = "search_only"
+        # Error tracking
+        self._search_errors: int = 0
+        self._insert_errors: int = 0
+        self._search_retries: int = 0
+        self._insert_retries: int = 0
         
     def set_concurrency_info(self, concurrent_searchers: int, concurrent_inserters: int, benchmark_mode: str):
         """Set concurrency information for the benchmark"""
@@ -72,6 +77,22 @@ class MetricsCollector:
             self._insert_latencies.append(latency_ms)
             self._insert_times.append(time.time())
     
+    def record_search_error(self):
+        with self._lock:
+            self._search_errors += 1
+    
+    def record_insert_error(self):
+        with self._lock:
+            self._insert_errors += 1
+    
+    def record_search_retry(self):
+        with self._lock:
+            self._search_retries += 1
+    
+    def record_insert_retry(self):
+        with self._lock:
+            self._insert_retries += 1
+    
     def _calculate_latency_metrics(self, latencies: List[float]) -> LatencyMetrics:
         if not latencies:
             return LatencyMetrics(0, 0, 0, 0, 0, 0)
@@ -94,6 +115,47 @@ class MetricsCollector:
         
         runtime = self._end_time - self._start_time
         return len(operation_times) / runtime if runtime > 0 else 0.0
+    
+    def get_progress_info(self, since_time: float) -> Dict[str, Any]:
+        """Get progress information since a specific time"""
+        with self._lock:
+            current_time = time.time()
+            elapsed = current_time - self._start_time if self._start_time else 0
+            
+            # Calculate QPS since the specified time
+            recent_search_times = [t for t in self._search_times if t >= since_time]
+            recent_insert_times = [t for t in self._insert_times if t >= since_time]
+            
+            time_window = current_time - since_time if since_time > 0 else elapsed
+            search_qps = len(recent_search_times) / time_window if time_window > 0 else 0
+            insert_qps = len(recent_insert_times) / time_window if time_window > 0 else 0
+            
+            # Calculate latency metrics for recent operations
+            recent_search_latencies = [lat for i, lat in enumerate(self._search_latencies) 
+                                     if self._search_times[i] >= since_time]
+            recent_insert_latencies = [lat for i, lat in enumerate(self._insert_latencies) 
+                                     if self._insert_times[i] >= since_time]
+            
+            search_latency_p50 = np.percentile(recent_search_latencies, 50) if recent_search_latencies else 0
+            search_latency_p99 = np.percentile(recent_search_latencies, 99) if recent_search_latencies else 0
+            insert_latency_p50 = np.percentile(recent_insert_latencies, 50) if recent_insert_latencies else 0
+            insert_latency_p99 = np.percentile(recent_insert_latencies, 99) if recent_insert_latencies else 0
+            
+            return {
+                'elapsed_seconds': elapsed,
+                'search_qps': search_qps,
+                'insert_qps': insert_qps,
+                'search_latency_p50': search_latency_p50,
+                'search_latency_p99': search_latency_p99,
+                'insert_latency_p50': insert_latency_p50,
+                'insert_latency_p99': insert_latency_p99,
+                'search_errors': self._search_errors,
+                'insert_errors': self._insert_errors,
+                'search_retries': self._search_retries,
+                'insert_retries': self._insert_retries,
+                'total_searches': len(self._search_latencies),
+                'total_inserts': len(self._insert_latencies)
+            }
     
     def calculate_recall(self, ground_truth: np.ndarray, results: np.ndarray, k: int, training_vectors: np.ndarray = None) -> float:
         if len(results.shape) == 1:

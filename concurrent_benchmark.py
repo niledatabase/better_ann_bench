@@ -131,6 +131,7 @@ class ConcurrentBenchmark:
         self.algorithm_config = algorithm_config
         self.metrics = MetricsCollector()
         self._stop_event = threading.Event()
+        self._stop_progress = False
         
     def _search_worker(self, index: VectorIndex, queries: np.ndarray, k: int, worker_id: int):
         local_query_count = 0
@@ -157,6 +158,7 @@ class ConcurrentBenchmark:
                     local_query_count += 1
                 except Exception as e:
                     print(f"Search worker {worker_id} error: {e}")
+                    self.metrics.record_search_error()
                     
             query_idx = batch_end
             
@@ -179,6 +181,7 @@ class ConcurrentBenchmark:
                 local_insert_count += len(batch_vectors)
             except Exception as e:
                 print(f"Insert worker {worker_id} error: {e}")
+                self.metrics.record_insert_error()
                 
             vector_idx = batch_end
             
@@ -213,6 +216,7 @@ class ConcurrentBenchmark:
                         local_query_count += 1
                     except Exception as e:
                         print(f"Search worker {worker_id} error: {e}")
+                        self.metrics.record_search_error()
                         
                 query_idx = batch_end
                 
@@ -288,6 +292,12 @@ class ConcurrentBenchmark:
         
         self.metrics.start_timing()
         
+        # Start progress monitoring if enabled
+        progress_thread = None
+        if self.config.show_progress is not None:
+            progress_thread = threading.Thread(target=self._progress_monitor, daemon=True)
+            progress_thread.start()
+        
         max_workers = self.config.concurrent_searchers
         if self.config.benchmark_mode == "hybrid":
             max_workers += self.config.concurrent_inserters
@@ -340,6 +350,11 @@ class ConcurrentBenchmark:
         
         self.metrics.end_timing()
         
+        # Stop progress monitoring if it was started
+        if progress_thread is not None:
+            self._stop_progress = True
+            progress_thread.join(timeout=5)
+        
 
         # Calculate recall if ground truth is available
         if workload.ground_truth is not None:
@@ -377,3 +392,34 @@ class ConcurrentBenchmark:
             dataset_size,
             self.algorithm_config.search_params
         )
+    
+    def _progress_monitor(self):
+        """Monitor and report progress at regular intervals"""
+        import time
+        
+        last_report_time = time.time()
+        interval = self.config.show_progress
+        
+        while not self._stop_progress:
+            time.sleep(interval)
+            
+            if self._stop_progress:
+                break
+                
+            current_time = time.time()
+            progress_info = self.metrics.get_progress_info(last_report_time)
+            
+            print(f"\n=== Progress Report ({progress_info['elapsed_seconds']:.1f}s elapsed) ===")
+            print(f"Search QPS: {progress_info['search_qps']:.2f}")
+            print(f"Search Latency - P50: {progress_info['search_latency_p50']:.2f}ms, P99: {progress_info['search_latency_p99']:.2f}ms")
+            print(f"Search Errors: {progress_info['search_errors']}, Retries: {progress_info['search_retries']}")
+            
+            if self.config.benchmark_mode == "hybrid":
+                print(f"Insert QPS: {progress_info['insert_qps']:.2f}")
+                print(f"Insert Latency - P50: {progress_info['insert_latency_p50']:.2f}ms, P99: {progress_info['insert_latency_p99']:.2f}ms")
+                print(f"Insert Errors: {progress_info['insert_errors']}, Retries: {progress_info['insert_retries']}")
+            
+            print(f"Total Operations - Searches: {progress_info['total_searches']}, Inserts: {progress_info['total_inserts']}")
+            print("=" * 50)
+            
+            last_report_time = current_time
