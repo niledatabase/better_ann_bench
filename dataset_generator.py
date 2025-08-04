@@ -13,9 +13,9 @@ class DatasetConfig:
     size: int
     dimension: int
     query_size: int
-    # Ground truth computation block sizes (for memory management) - REQUIRED
-    gt_train_block_size: int  # Training vectors per block for ground truth computation
-    gt_query_block_size: int  # Query vectors per block for ground truth computation
+    # Ground truth computation block sizes (for memory management) - optional with defaults
+    gt_train_block_size: int = 50000  # Training vectors per block for ground truth computation
+    gt_query_block_size: int = 1000  # Query vectors per block for ground truth computation
     # Memory management
     chunk_size: int = 10000  # Generate training vectors in chunks to manage memory
     query_chunk_size: int = 1000  # Generate query vectors in chunks to manage memory
@@ -278,9 +278,6 @@ class DatasetGenerator:
             f.attrs['k_neighbors'] = self.config.k_neighbors
             f.attrs['seed'] = self.config.seed
             f.attrs['has_ground_truth'] = False  # Will be updated after ground truth computation
-        
-        # Since this method is only called for large datasets, always return file paths
-        print("Large dataset detected - returning file paths for memory efficiency")
         
         # Compute ground truth using memory-efficient method
         if self.config.skip_ground_truth:

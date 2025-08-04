@@ -19,7 +19,7 @@ class VectorIndex(Protocol):
         pass
     
     @abstractmethod
-    def build_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
+    def build_streaming(self, vectors_path: str) -> None:
         """Build index by streaming vectors from file in chunks"""
         pass
     

@@ -159,7 +159,7 @@ class PgVector(VectorIndex):
         else:
             self._build_with_new_data(vectors)
     
-    def build_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
+    def build_streaming(self, vectors_path: str) -> None:
         """Build index by streaming vectors from file in chunks"""
         if self.reuse_table:
             # Reuse existing table - just verify it exists and has correct structure
@@ -170,18 +170,16 @@ class PgVector(VectorIndex):
             self._build_with_existing_table_streaming(file_dimension)
         else:
             # Build new table with streaming data
-            self._build_with_new_data_streaming(vectors_path, chunk_size)
+            self._build_with_new_data_streaming(vectors_path)
     
     def _build_with_existing_table_streaming(self, file_dimension: int) -> None:
         """Build index using existing table data (streaming version)"""
         print(f"Reusing existing table '{self.table_name}' - skipping data loading and index creation")
         self._verify_existing_table(file_dimension)
     
-    def _build_with_new_data_streaming(self, vectors_path: str, chunk_size: int = None) -> None:
+    def _build_with_new_data_streaming(self, vectors_path: str) -> None:
         """Build index by streaming vectors from file in chunks"""
-        # Use instance batch_size if chunk_size not specified
-        if chunk_size is None:
-            chunk_size = self.batch_size
+        chunk_size = self.batch_size
         
         import h5py
         
@@ -275,6 +273,9 @@ class PgVector(VectorIndex):
         
         cursor = self._thread_local.cursor
 
+        # Ensure query is 1D and convert to list
+        if query.ndim > 1:
+            query = query.flatten()
         query_vector = query.tolist()
         
         cursor.execute(f"""

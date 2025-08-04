@@ -11,14 +11,15 @@ class DatasetMode(Enum):
 
 @dataclass
 class DatasetGenerationConfig:
-    # Ground truth computation block sizes (for memory management) - REQUIRED
-    gt_train_block_size: int  # Training vectors per block for ground truth computation
-    gt_query_block_size: int  # Query vectors per block for ground truth computation
+    # Ground truth computation block sizes (for memory management) - optional with defaults
+    gt_train_block_size: int = 50000  # Training vectors per block for ground truth computation
+    gt_query_block_size: int = 1000  # Query vectors per block for ground truth computation
     # Memory management - chunk sizes for dataset generation
     chunk_size: int = 10000  # Training vectors chunk size
     query_chunk_size: int = 1000  # Query vectors chunk size
     # Dataset generation parameters
     enabled: bool = False
+    distribution: str = "clustered"  # Data distribution type
     dimension: int = 128
     clusters: int = 100
     cluster_std: float = 0.1
