@@ -172,11 +172,6 @@ class DatasetGenerator:
         
         start_time = time.time()
         
-        # If save path is provided, generate and save in chunks to avoid memory issues
-        if save_path:
-            print("Using memory-efficient chunked generation...")
-            return self._generate_dataset_chunked(save_path)
-        
         # For small datasets, use the original approach
         if self.config.size <= 1000000:  # 1M vectors threshold
             print("Using standard generation for small dataset...")
