@@ -284,15 +284,29 @@ class PgVector(VectorIndex):
             query = query.flatten()
         query_vector = query.tolist()
         
-        cursor.execute(f"""
-            SELECT id
-            FROM {self.table_name} 
-            ORDER BY vector <-> %s::vector 
-            LIMIT %s
-        """, (query_vector, k))
-        
-        results = cursor.fetchall()
-        return np.array([row[0] for row in results])
+        try:
+            cursor.execute(f"""
+                SELECT id
+                FROM {self.table_name} 
+                ORDER BY vector <-> %s::vector 
+                LIMIT %s
+            """, (query_vector, k))
+            
+            results = cursor.fetchall()
+            return np.array([row[0] for row in results])
+        except (psycopg2.InterfaceError, psycopg2.OperationalError) as e:
+            # Reset the thread-local connection so it gets recreated on next call
+            # This handles various connection-related errors from DB restart:
+            # - "cursor already closed"
+            # - "connection already closed" 
+            # - "server closed the connection unexpectedly"
+            # - "connection to server lost"
+            # - etc.
+            if hasattr(self._thread_local, 'connection'):
+                delattr(self._thread_local, 'connection')
+            if hasattr(self._thread_local, 'cursor'):
+                delattr(self._thread_local, 'cursor')
+            raise e
     
     def supports_concurrent_operations(self) -> bool:
         return True
