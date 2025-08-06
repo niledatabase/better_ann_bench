@@ -411,12 +411,12 @@ class ConcurrentBenchmark:
             
             print(f"\n=== Progress Report ({progress_info['elapsed_seconds']:.1f}s elapsed) ===")
             print(f"Search QPS: {progress_info['search_qps']:.2f}")
-            print(f"Search Latency - P50: {progress_info['search_latency_p50']:.2f}ms, P99: {progress_info['search_latency_p99']:.2f}ms")
+            print(f"Search Latency - P50: {progress_info['search_latency_p50']:.2f}ms, P99: {progress_info['search_latency_p99']:.2f}ms, Max: {progress_info['search_latency_max']:.2f}ms")
             print(f"Search Errors: {progress_info['search_errors']}, Retries: {progress_info['search_retries']}")
             
             if self.config.benchmark_mode == "hybrid":
                 print(f"Insert QPS: {progress_info['insert_qps']:.2f}")
-                print(f"Insert Latency - P50: {progress_info['insert_latency_p50']:.2f}ms, P99: {progress_info['insert_latency_p99']:.2f}ms")
+                print(f"Insert Latency - P50: {progress_info['insert_latency_p50']:.2f}ms, P99: {progress_info['insert_latency_p99']:.2f}ms, Max: {progress_info['insert_latency_max']:.2f}ms")
                 print(f"Insert Errors: {progress_info['insert_errors']}, Retries: {progress_info['insert_retries']}")
             
             print(f"Total Operations - Searches: {progress_info['total_searches']}, Inserts: {progress_info['total_inserts']}")

@@ -37,7 +37,10 @@ class PgVector(VectorIndex):
         """Get the shared database connection for build operations"""
         if self._connection is None or self._connection.closed:
             try:
-                self._connection = psycopg2.connect(**self.connection_params)
+                # Add timeout parameters to connection
+                conn_params = self.connection_params.copy()
+                conn_params['connect_timeout'] = 5  # 5 second connection timeout
+                self._connection = psycopg2.connect(**conn_params)
                 self._connection.autocommit = True
             except Exception as e:
                 raise RuntimeError(f"Failed to connect to PostgreSQL: {e}")
@@ -259,7 +262,10 @@ class PgVector(VectorIndex):
         # Initialize thread-local connection and cursor for this worker (only once per thread)
         if not hasattr(self._thread_local, 'connection'):
             try:
-                self._thread_local.connection = psycopg2.connect(**self.connection_params)
+                # Add timeout parameters to connection
+                conn_params = self.connection_params.copy()
+                conn_params['connect_timeout'] = 5  # 5 second connection timeout
+                self._thread_local.connection = psycopg2.connect(**conn_params)
                 self._thread_local.connection.autocommit = True
                 self._thread_local.cursor = self._thread_local.connection.cursor()
                 self._thread_local.cursor.execute(f"SET nile.tenant_id = '{self.tenant_id}';")

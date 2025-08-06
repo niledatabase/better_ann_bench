@@ -138,8 +138,10 @@ class MetricsCollector:
             
             search_latency_p50 = np.percentile(recent_search_latencies, 50) if recent_search_latencies else 0
             search_latency_p99 = np.percentile(recent_search_latencies, 99) if recent_search_latencies else 0
+            search_latency_max = max(recent_search_latencies) if recent_search_latencies else 0
             insert_latency_p50 = np.percentile(recent_insert_latencies, 50) if recent_insert_latencies else 0
             insert_latency_p99 = np.percentile(recent_insert_latencies, 99) if recent_insert_latencies else 0
+            insert_latency_max = max(recent_insert_latencies) if recent_insert_latencies else 0
             
             return {
                 'elapsed_seconds': elapsed,
@@ -147,8 +149,10 @@ class MetricsCollector:
                 'insert_qps': insert_qps,
                 'search_latency_p50': search_latency_p50,
                 'search_latency_p99': search_latency_p99,
+                'search_latency_max': search_latency_max,
                 'insert_latency_p50': insert_latency_p50,
                 'insert_latency_p99': insert_latency_p99,
+                'insert_latency_max': insert_latency_max,
                 'search_errors': self._search_errors,
                 'insert_errors': self._insert_errors,
                 'search_retries': self._search_retries,

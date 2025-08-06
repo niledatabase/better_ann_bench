@@ -227,13 +227,13 @@ def print_results(results: BenchmarkResults, algorithm_name: str):
     print(f"\nSearch Performance:")
     print(f"  QPS: {results.search_qps:.2f}")
     print(f"  Total Queries: {results.total_queries}")
-    print(f"  Latency (ms) - P50: {results.search_latencies.p50:.2f}, P95: {results.search_latencies.p95:.2f}, P99: {results.search_latencies.p99:.2f}")
+    print(f"  Latency (ms) - P50: {results.search_latencies.p50:.2f}, P95: {results.search_latencies.p95:.2f}, P99: {results.search_latencies.p99:.2f}, Max: {results.search_latencies.max:.2f}")
     
     if results.insert_latencies:
         print(f"\nInsert Performance:")
         print(f"  QPS: {results.insert_qps:.2f}")
         print(f"  Total Inserts: {results.total_inserts}")
-        print(f"  Latency (ms) - P50: {results.insert_latencies.p50:.2f}, P95: {results.insert_latencies.p95:.2f}, P99: {results.insert_latencies.p99:.2f}")
+        print(f"  Latency (ms) - P50: {results.insert_latencies.p50:.2f}, P95: {results.insert_latencies.p95:.2f}, P99: {results.insert_latencies.p99:.2f}, Max: {results.insert_latencies.max:.2f}")
 
 
 def main():

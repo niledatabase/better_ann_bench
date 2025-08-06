@@ -34,7 +34,8 @@ def cleanup_pgvector(config_path: str, table_name: str = None, index_name: str =
     print(f"Indexes to drop: {index_name}, {tenant_index_name}")
     
     try:
-        # Connect to database
+        # Connect to database with timeout
+        connection_params['connect_timeout'] = 5  # 5 second connection timeout
         conn = psycopg2.connect(**connection_params)
         conn.autocommit = True
         

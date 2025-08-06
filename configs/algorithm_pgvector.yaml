@@ -9,7 +9,7 @@ build_params:
     password: "5a46ff30-d6fd-485b-9ada-4c3f826afb1e"
   table_name: "vectors"
   index_name: "vectors_hnsw_idx"
-  tenant_id: "0197f6a3-3337-775d-83cd-f5da818c10b8"  # Use the user UUID as tenant ID
+  tenant_id: "019880c9-a264-7899-9296-e274ef087da4"
   batch_size: 1000
   m: 16
   ef_construction: 64
